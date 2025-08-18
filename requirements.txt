@@ -1,0 +1,8 @@
+# Core Airflow
+apache-airflow[postgres,celery,redis]==2.8.0
+psycopg2-binary==2.9.9
+pandas==2.1.4
+numpy==1.24.4
+requests==2.31.0
+pyyaml==6.0.1
+python-dateutil==2.8.2
