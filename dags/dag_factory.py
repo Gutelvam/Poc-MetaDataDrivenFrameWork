@@ -43,5 +43,5 @@ class DAGFactory:
             return dag
             
         except Exception as e:
-            logger.error(f"Failed to create DAG from {config_file}: {str^(e^)}")
+            logger.error(f"Failed to create DAG from {config_file}: {str(e)}")
             raise

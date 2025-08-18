@@ -1,0 +1,275 @@
+x-airflow-common:
+  &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__API__SECRET_KEY: 'framework_secret_key_change_in_production'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Airflow 3.x: Simplified authentication (no traditional web login)
+    AIRFLOW__WEBSERVER__AUTHENTICATE: 'false'
+    # AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.default'
+    FRAMEWORK_METADATA_PATH: /opt/airflow/metadata
+    PYTHONPATH: /opt/airflow/dags:/opt/airflow
+    COMPOSE_CONVERT_WINDOWS_PATHS: 1
+  volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/metadata:/opt/airflow/metadata
+    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+    ports:
+      - "5432:5432"
+
+  postgres-dev:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: test_database
+    volumes:
+      - postgres-dev-volume:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    expose:
+      - 6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 50
+      start_period: 30s
+    restart: always
+
+  # YOUR ORIGINAL API-SERVER (replaces webserver in Airflow 3.x)
+  airflow-api-server:
+    <<: *airflow-common
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # YOUR ORIGINAL SCHEDULER
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # YOUR ORIGINAL TRIGGERER
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # INIT: Airflow 3.x compatible (no users command needed)
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo "🚀 Inicializando Framework com Airflow 3.x..."
+        echo "=============================================="
+        
+        echo "⏳ Aguardando PostgreSQL..."
+        while ! pg_isready -h postgres -U airflow -d airflow; do
+          echo "   Aguardando conexão com o banco..."
+          sleep 2
+        done
+        echo "✅ PostgreSQL pronto"
+        
+        echo "🗄️  Inicializando banco de dados do Airflow..."
+        airflow db migrate
+        
+        if [ $? -eq 0 ]; then
+            echo "✅ Banco de dados migrado com sucesso"
+        else
+            echo "❌ Falha na migração do banco"
+            exit 1
+        fi
+        
+        echo "👤 Airflow 3.x - Configurando autenticação..."
+        echo "   ℹ️  Airflow 3.x usa autenticação simplificada"
+        echo "   ℹ️  Acesso direto sem login tradicional"
+        
+        # Create default admin user directly in database (Airflow 3.x method)
+        python3 -c "
+        import sys
+        sys.path.insert(0, '/opt/airflow')
+        try:
+            from airflow import settings
+            from airflow.models import User
+            from sqlalchemy.orm import sessionmaker
+            from sqlalchemy import create_engine
+            
+            # Create database session
+            engine = create_engine('postgresql+psycopg2://airflow:airflow@postgres/airflow')
+            Session = sessionmaker(bind=engine)
+            session = Session()
+            
+            # Check if admin user exists
+            admin_user = session.query(User).filter(User.username == 'admin').first()
+            
+            if not admin_user:
+                # Create admin user
+                admin_user = User(
+                    username='admin',
+                    email='admin@framework.com',
+                    first_name='Framework',
+                    last_name='Admin',
+                    is_active=True,
+                    is_superuser=True
+                )
+                session.add(admin_user)
+                session.commit()
+                print('✅ Usuário admin criado com sucesso via database')
+            else:
+                print('⚠️ Usuário admin já existe')
+            
+            session.close()
+            
+        except Exception as e:
+            print(f'ℹ️ Airflow 3.x: {e}')
+            print('ℹ️ Continuando sem criação de usuário - acesso direto disponível')
+        "
+        
+        echo "📁 Criando estrutura de diretórios..."
+        mkdir -p /sources/logs /sources/dags /sources/plugins /sources/metadata /sources/config
+        chown -R "${AIRFLOW_UID:-50000}:0" /sources/{logs,dags,plugins,metadata,config}
+        
+        echo ""
+        echo "🎉 Inicialização concluída com sucesso!"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "🌐 Acesse: http://localhost:8080"
+        echo "📖 Airflow 3.x - API Server + Scheduler + Triggerer"
+        echo "🔓 Acesso direto (sem login) ou use API"
+        echo "⚡ Sua arquitetura original mantida!"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+    user: "0:0"
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}:/sources
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+
+  # mongodb:
+  #   image: mongo:7.0
+  #   ports:
+  #     - "27017:27017"
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: admin
+  #     MONGO_INITDB_ROOT_PASSWORD: admin123
+  #   volumes:
+  #     - mongodb-data:/data/db
+  #   profiles:
+  #     - with-mongo
+
+  # clickhouse:
+  #   image: clickhouse/clickhouse-server:latest
+  #   ports:
+  #     - "8123:8123"
+  #     - "9000:9000"
+  #   environment:
+  #     CLICKHOUSE_DB: test_db
+  #     CLICKHOUSE_USER: default
+  #     CLICKHOUSE_PASSWORD: ""
+  #   volumes:
+  #     - clickhouse-data:/var/lib/clickhouse
+  #   profiles:
+  #     - with-clickhouse
+
+volumes:
+  postgres-db-volume:
+  postgres-dev-volume:
+  prometheus-data:
+  grafana-data:
+  # mongodb-data:
+  # clickhouse-data:
+  
+
+
+
+
+
+  

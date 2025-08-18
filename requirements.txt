@@ -1,8 +1,45 @@
-# Core Airflow
-apache-airflow[postgres,celery,redis]==2.8.0
+# Core Airflow Providers
+apache-airflow-providers-postgres
+apache-airflow-providers-celery  
+apache-airflow-providers-redis
+
+# Database connectors
 psycopg2-binary==2.9.9
+pymongo==4.14.0
+clickhouse-connect
+sqlalchemy
+
+# Data processing (FIXED: Python 3.12 compatible versions)
 pandas==2.1.4
-numpy==1.24.4
+numpy==1.26.4
+pyarrow
+scipy
+
+# Core utilities
 requests==2.31.0
 pyyaml==6.0.1
 python-dateutil==2.8.2
+python-dotenv==1.1.1
+
+# SQL processing
+pandasql==0.7.3
+
+# Validation and schemas
+jsonschema==4.25.0
+cerberus
+
+# Cloud storage
+azure-storage-blob
+boto3
+google-cloud-storage
+
+# File transfer
+paramiko
+pysftp
+
+# HTTP and APIs
+urllib3
+
+# Machine Learning (optional)
+sentence-transformers
+scikit-learn

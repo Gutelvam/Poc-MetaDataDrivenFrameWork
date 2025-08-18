@@ -1,0 +1,291 @@
+# Metadata-Driven Pipeline Framework Configuration
+# This file contains global configuration settings for the framework
+
+framework:
+  name: "Metadata-Driven Pipeline Framework"
+  version: "1.0.0"
+  description: "Framework for creating data pipelines from YAML configurations"
+  
+  # Framework-specific settings
+  metadata_path: "/opt/airflow/metadata"
+  config_path: "/opt/airflow/config"
+  logs_path: "/opt/airflow/logs"
+  
+  # DAG generation settings
+  dag_generation:
+    auto_discovery: true
+    scan_interval: 60  # seconds
+    validation_on_load: true
+    cache_configurations: true
+    max_dag_file_size: "10MB"
+    
+  # Default DAG settings
+  dag_defaults:
+    owner: "data-platform"
+    retries: 3
+    retry_delay: 300  # seconds
+    max_active_runs: 1
+    catchup: false
+    depends_on_past: false
+    email_on_failure: false
+    email_on_retry: false
+    
+  # Task execution settings
+  task_defaults:
+    timeout: 3600  # seconds
+    pool: "default_pool"
+    priority_weight: 1
+    queue: "default"
+    
+  # Data quality settings
+  data_quality:
+    enabled: true
+    fail_on_critical: true
+    store_results: true
+    default_threshold: 0.95
+    
+    # Default quality rules applied to all pipelines
+    global_rules:
+      - name: "row_count_check"
+        rule_type: "custom"
+        parameters:
+          function: |
+            result = {'score': 1.0 if len(data) > 0 else 0.0, 'details': {'row_count': len(data)}}
+        threshold: 1.0
+        severity: "warning"
+
+# Monitoring and observability
+monitoring:
+  enabled: true
+  
+  # Metrics collection
+  metrics:
+    prometheus:
+      enabled: true
+      pushgateway_url: "http://prometheus:9090"
+      job_name: "airflow_framework"
+      push_interval: 60  # seconds
+      
+    # Custom metrics
+    custom_metrics:
+      - name: "pipeline_execution_duration"
+        type: "histogram"
+        description: "Time taken to execute pipelines"
+        labels: ["dag_id", "status"]
+        
+      - name: "data_quality_score"
+        type: "gauge"
+        description: "Data quality scores"
+        labels: ["dag_id", "task_id", "rule_name"]
+        
+      - name: "records_processed"
+        type: "counter"
+        description: "Number of records processed"
+        labels: ["dag_id", "task_id", "source_type"]
+
+  # Alerting
+  alerting:
+    enabled: true
+    channels:
+      - type: "grafana"
+        webhook_url: "http://grafana:3000/api/annotations"
+        api_key: "${GRAFANA_API_KEY}"
+        
+    # Alert rules
+    rules:
+      - name: "pipeline_failure"
+        condition: "task_failure or dag_failure"
+        severity: "critical"
+        message: "Pipeline {{dag_id}} failed at {{execution_date}}"
+        
+      - name: "data_quality_failure"
+        condition: "quality_check_failed and severity == 'critical'"
+        severity: "high"
+        message: "Critical data quality check failed in {{dag_id}}.{{task_id}}"
+        
+      - name: "long_running_task"
+        condition: "task_duration > 7200"  # 2 hours
+        severity: "warning"
+        message: "Task {{task_id}} in {{dag_id}} has been running for over 2 hours"
+
+# Source configurations
+sources:
+  # Default connection settings
+  connection_pools:
+    postgres:
+      max_connections: 10
+      connection_timeout: 30
+      
+    mongodb:
+      max_connections: 5
+      connection_timeout: 30
+      
+    clickhouse:
+      max_connections: 8
+      connection_timeout: 30
+      
+  # Source-specific settings
+  postgresql:
+    default_batch_size: 10000
+    query_timeout: 1800
+    connection_retry_attempts: 3
+    
+  mongodb:
+    default_batch_size: 5000
+    query_timeout: 1800
+    connection_retry_attempts: 3
+    
+  clickhouse:
+    default_batch_size: 50000
+    query_timeout: 3600
+    connection_retry_attempts: 3
+    
+  rest_api:
+    default_timeout: 300
+    retry_attempts: 3
+    retry_delay: 60
+    max_payload_size: "100MB"
+
+# Sink configurations
+sinks:
+  # Default settings for each sink type
+  postgresql:
+    default_batch_size: 5000
+    connection_timeout: 30
+    auto_create_schema: true
+    vacuum_after_load: false
+    
+  mongodb:
+    default_batch_size: 1000
+    connection_timeout: 30
+    write_concern: "majority"
+    
+  clickhouse:
+    default_batch_size: 10000
+    connection_timeout: 60
+    async_insert: true
+    
+  datalake:
+    default_partition_size: "128MB"
+    compression: "snappy"
+    file_format: "parquet"
+
+# Transform configurations
+transforms:
+  # SQL transformation settings
+  sql:
+    enabled: true
+    engine: "pandas"  # or "duckdb", "postgres"
+    memory_limit: "2GB"
+    temp_table_prefix: "temp_"
+    
+  # Python transformation settings
+  python:
+    enabled: true
+    max_memory: "4GB"
+    timeout: 3600
+    allowed_imports:
+      - "pandas"
+      - "numpy"
+      - "datetime"
+      - "json"
+      - "re"
+      - "math"
+      - "statistics"
+    
+  # Custom script settings
+  custom_scripts:
+    enabled: true
+    allowed_types: ["python", "bash"]
+    execution_timeout: 3600
+    temp_directory: "/tmp/airflow_scripts"
+    cleanup_after_execution: true
+
+# Security settings
+security:
+  # Connection encryption
+  encrypt_connections: false
+  
+  # Parameter validation
+  validate_inputs: true
+  sanitize_sql: true
+  
+  # Allowed hosts for API calls
+  allowed_hosts:
+    - "*.internal.company.com"
+    - "api.trusted-partner.com"
+    
+  # Resource limits
+  resource_limits:
+    max_memory_per_task: "8GB"
+    max_cpu_per_task: 4
+    max_execution_time: 14400  # 4 hours
+    max_file_size: "1GB"
+
+# Development and testing
+development:
+  # Enable debug mode
+  debug_mode: false
+  
+  # Dry run mode (validate without executing)
+  dry_run_available: true
+  
+  # Development databases
+  test_connections:
+    postgres_dev: "postgres://postgres:postgres@postgres-dev:5432/test_database"
+    
+  # Sample data generation
+  sample_data:
+    enabled: true
+    generators:
+      customers: 1000
+      orders: 5000
+      events: 10000
+
+# Performance optimization
+performance:
+  # Task parallelism
+  task_parallelism:
+    default_pool_size: 32
+    max_concurrent_tasks: 16
+    
+  # Memory management
+  memory_management:
+    chunk_processing: true
+    default_chunk_size: 10000
+    memory_threshold: "80%"
+    
+  # Caching
+  caching:
+    enabled: true
+    cache_type: "redis"
+    cache_ttl: 3600  # seconds
+    max_cache_size: "1GB"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Structured logging
+  structured_logging:
+    enabled: true
+    include_context: true
+    extra_fields:
+      - "dag_id"
+      - "task_id"
+      - "execution_date"
+      - "try_number"
+      
+  # Log aggregation
+  aggregation:
+    enabled: false
+    endpoint: "http://loki:3100/loki/api/v1/push"
+    
+# Feature flags
+features:
+  enable_data_lineage: true
+  enable_schema_evolution: true
+  enable_automatic_retries: true
+  enable_cost_optimization: false
+  enable_advanced_scheduling: true

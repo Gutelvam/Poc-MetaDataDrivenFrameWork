@@ -1,0 +1,317 @@
+dag_id: pipeline_exemplo_completo
+description: "Pipeline completo demonstrando todas as funcionalidades do framework"
+pipeline_type: batch
+schedule_interval: "0 2 * * *"
+start_date: "2024-01-01"
+catchup: false
+max_active_runs: 1
+owner: data-engineering
+tags:
+  - exemplo
+  - etl
+  - completo
+  - framework
+
+# Configurações globais de qualidade
+global_quality_rules:
+  - name: check_data_freshness
+    rule_type: freshness
+    column: created_at
+    parameters:
+      max_age_hours: 48
+    threshold: 1.0
+    severity: warning
+
+tasks:
+  # Tarefa inicial
+  - task_id: inicio
+    operator_type: dummy
+    description: "Início do pipeline"
+    retries: 1
+    retry_delay: 60
+
+  # Extração de dados principais
+  - task_id: extrair_customers
+    operator_type: extract
+    description: "Extrai dados de clientes"
+    depends_on: [inicio]
+    source:
+      name: customers_source
+      type: postgresql
+      connection_id: postgres_dev
+      schema_name: test_data
+      table_name: customers
+      query: |
+        SELECT 
+          customer_id,
+          first_name,
+          last_name,
+          email,
+          registration_date,
+          country,
+          city,
+          age,
+          customer_segment,
+          total_orders,
+          total_spent,
+          last_order_date,
+          is_active
+        FROM test_data.customers 
+        WHERE is_active = true
+        AND registration_date >= '{{ macros.ds_add(ds, -30) }}'
+    retries: 3
+    retry_delay: 300
+
+  # Extração de pedidos
+  - task_id: extrair_orders
+    operator_type: extract
+    description: "Extrai dados de pedidos"
+    depends_on: [inicio]
+    source:
+      name: orders_source
+      type: postgresql
+      connection_id: postgres_dev
+      schema_name: test_data
+      table_name: orders
+      query: |
+        SELECT 
+          order_id,
+          customer_id,
+          order_date,
+          order_amount,
+          product_category,
+          payment_method,
+          order_status,
+          shipping_country,
+          discount_amount,
+          tax_amount
+        FROM test_data.orders 
+        WHERE order_date = '{{ ds }}'
+        AND order_status = 'completed'
+
+  # Verificação de qualidade dos clientes
+  - task_id: qualidade_customers
+    operator_type: quality_check
+    description: "Verifica qualidade dos dados de clientes"
+    depends_on: [extrair_customers]
+    quality_rules:
+      - name: customer_email_not_null
+        rule_type: not_null
+        column: email
+        threshold: 1.0
+        severity: critical
+      
+      - name: customer_email_unique
+        rule_type: unique
+        column: email
+        threshold: 1.0
+        severity: critical
+      
+      - name: customer_age_range
+        rule_type: range
+        column: age
+        parameters:
+          min_value: 18
+          max_value: 100
+        threshold: 0.95
+        severity: warning
+      
+      - name: customer_email_pattern
+        rule_type: pattern
+        column: email
+        parameters:
+          pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        threshold: 0.98
+        severity: error
+
+  # Verificação de qualidade dos pedidos
+  - task_id: qualidade_orders
+    operator_type: quality_check
+    description: "Verifica qualidade dos dados de pedidos"
+    depends_on: [extrair_orders]
+    quality_rules:
+      - name: order_amount_positive
+        rule_type: range
+        column: order_amount
+        parameters:
+          min_value: 0.01
+          max_value: 10000
+        threshold: 1.0
+        severity: critical
+      
+      - name: order_date_not_null
+        rule_type: not_null
+        column: order_date
+        threshold: 1.0
+        severity: critical
+
+  # Transformação dos dados
+  - task_id: transformar_customer_summary
+    operator_type: transform
+    description: "Cria resumo dos clientes"
+    depends_on: [qualidade_customers, qualidade_orders]
+    sql_transform: |
+      SELECT 
+        c.customer_id,
+        c.first_name || ' ' || c.last_name as full_name,
+        c.email,
+        c.customer_segment,
+        c.country,
+        c.city,
+        c.age,
+        c.registration_date,
+        COALESCE(COUNT(o.order_id), 0) as orders_count,
+        COALESCE(SUM(o.order_amount), 0) as total_spent_today,
+        COALESCE(AVG(o.order_amount), 0) as avg_order_value,
+        '{{ ds }}' as processing_date,
+        CURRENT_TIMESTAMP as processed_at
+      FROM extrair_customers c
+      LEFT JOIN extrair_orders o ON c.customer_id = o.customer_id
+      GROUP BY 
+        c.customer_id, c.first_name, c.last_name, c.email,
+        c.customer_segment, c.country, c.city, c.age, c.registration_date
+
+  # Agregação por categoria
+  - task_id: agregar_por_categoria
+    operator_type: transform
+    description: "Agrega vendas por categoria"
+    depends_on: [extrair_orders]
+    python_transform: |
+      def aggregate_by_category(datasets, **context):
+          import pandas as pd
+          
+          orders = pd.DataFrame(datasets['extrair_orders'])
+          
+          if orders.empty:
+              return []
+          
+          # Agregação por categoria
+          category_summary = orders.groupby('product_category').agg({
+              'order_amount': ['sum', 'mean', 'count'],
+              'discount_amount': 'sum',
+              'tax_amount': 'sum'
+          }).round(2)
+          
+          # Flatten columns
+          category_summary.columns = ['_'.join(col).strip() for col in category_summary.columns]
+          category_summary = category_summary.reset_index()
+          
+          # Add metadata
+          category_summary['processing_date'] = context['ds']
+          category_summary['total_categories'] = len(category_summary)
+          
+          return category_summary.to_dict('records')
+
+  # Validação e limpeza de dados
+  - task_id: validar_e_limpar
+    operator_type: transform
+    description: "Valida e limpa os dados transformados"
+    depends_on: [transformar_customer_summary]
+    custom_params:
+      validation_rules:
+        remove_duplicates: true
+        duplicate_subset: ['customer_id']
+        missing_values:
+          email: 'drop'
+          total_spent_today: 'fill_zero'
+          avg_order_value: 'fill_zero'
+        type_conversions:
+          processing_date: 'datetime'
+          total_spent_today: 'numeric'
+        range_validations:
+          total_spent_today:
+            min: 0
+            max: 50000
+
+  # Carregamento para o data warehouse
+  - task_id: carregar_customer_summary
+    operator_type: load
+    description: "Carrega resumo de clientes no DW"
+    depends_on: [validar_e_limpar]
+    sink:
+      name: customer_summary_dw
+      type: postgresql
+      connection_id: postgres_dev
+      schema_name: test_data
+      table_name: customer_daily_summary
+      write_mode: upsert
+      upsert_keys: [customer_id, processing_date]
+      auto_create_table: true
+      table_schema:
+        customer_id: INTEGER
+        full_name: VARCHAR(255)
+        email: VARCHAR(255)
+        customer_segment: VARCHAR(50)
+        country: VARCHAR(50)
+        city: VARCHAR(100)
+        age: INTEGER
+        registration_date: DATE
+        orders_count: INTEGER
+        total_spent_today: DECIMAL(12,2)
+        avg_order_value: DECIMAL(10,2)
+        processing_date: DATE
+        processed_at: TIMESTAMP
+      batch_size: 1000
+
+  # Carregamento das agregações
+  - task_id: carregar_category_summary
+    operator_type: load
+    description: "Carrega agregações por categoria"
+    depends_on: [agregar_por_categoria]
+    sink:
+      name: category_summary_dw
+      type: postgresql
+      connection_id: postgres_dev
+      schema_name: test_data
+      table_name: category_daily_summary
+      write_mode: append
+      auto_create_table: true
+      batch_size: 100
+
+  # Geração de relatório de qualidade
+  - task_id: relatorio_qualidade
+    operator_type: quality_check
+    description: "Gera relatório final de qualidade"
+    depends_on: [carregar_customer_summary, carregar_category_summary]
+    quality_rules:
+      - name: check_completeness
+        rule_type: completeness
+        threshold: 0.95
+        severity: warning
+
+  # Notificação de sucesso
+  - task_id: notificar_sucesso
+    operator_type: custom
+    description: "Notifica sucesso do pipeline"
+    depends_on: [relatorio_qualidade]
+    custom_function: |
+      def notify_success(**context):
+          import logging
+          logger = logging.getLogger(__name__)
+          
+          dag_id = context['dag'].dag_id
+          execution_date = context['execution_date']
+          
+          logger.info(f"Pipeline {dag_id} executado com sucesso em {execution_date}")
+          
+          return {
+              "status": "success",
+              "dag_id": dag_id,
+              "execution_date": execution_date.isoformat(),
+              "message": "Pipeline concluído com sucesso"
+          }
+    
+  # Tarefa final
+  - task_id: fim
+    operator_type: dummy
+    description: "Fim do pipeline"
+    depends_on: [notificar_sucesso]
+
+# Configurações de SLA e monitoramento
+sla: 120  # 2 horas
+retries: 2
+retry_delay: 600  # 10 minutos
+
+# Configurações de reprocessamento
+allow_reprocessing: true
+reprocess_lookback_days: 7

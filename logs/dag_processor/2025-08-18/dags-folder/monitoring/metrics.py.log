@@ -1,0 +1,22 @@
+{"timestamp":"2025-08-18T12:59:28.541034","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T12:59:29.246437","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T12:59:59.357369","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T12:59:59.394019","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:00:30.423709","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:00:30.460975","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:01:01.221700","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:01:01.259769","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:01:32.247721","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:01:32.285761","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:02:03.419393","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:02:03.460662","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:02:34.671047","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:02:34.708470","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:03:05.920448","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:03:05.958834","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:03:36.564153","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:03:36.616769","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:04:06.703343","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:04:06.752493","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
+{"timestamp":"2025-08-18T13:04:37.914319","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/monitoring/metrics.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T13:04:37.950927","level":"info","event":"Metrics pusher started","logger":"unusual_prefix_39c764ef26cd259be5ef387ab6eaacd251389c7a_metrics"}
