@@ -1,14 +1,28 @@
 """
-DAG Factory Core Implementation - Windows Batch Version
+DAG Factory Core Implementation - Airflow 3.x Compatible
 Creates DAGs dynamically from metadata configurations
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Any, Optional
+import yaml
 
 from airflow import DAG
-from airflow.operators.dummy import DummyOperator
+from airflow.operators.empty import EmptyOperator
+# Import other operators here as needed, e.g.,
+# from airflow.operators.bash import BashOperator
+# from airflow.operators.python import PythonOperator
+
+# Import framework modules (assuming these are in the PYTHONPATH)
+from sources.operators import create_source_operator
+from sinks.operators import create_sink_operator
+from transforms.operators import (
+    create_sql_transform_operator, create_python_transform_operator,
+    create_custom_script_transform_operator, create_validation_transform_operator,
+    create_aggregation_transform_operator
+)
+from quality.operators import create_data_quality_operator, create_data_profile_operator
 
 logger = logging.getLogger(__name__)
 
@@ -21,24 +35,79 @@ class DAGFactory:
     def create_dag(self, config_file: str) -> DAG:
         """Create a DAG from a configuration file"""
         try:
-            # For initial setup, create a simple test DAG
+            # Load configuration from YAML file
+            with open(config_file, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            dag_id = config.get('dag_id')
+            description = config.get('description', 'No description provided')
+            schedule_interval = config.get('schedule_interval')
+            start_date_str = config.get('start_date')
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else datetime(2024, 1, 1)
+            catchup = config.get('catchup', False)
+            owner = config.get('owner', 'airflow')
+            tags = config.get('tags', [])
+            
+            default_args = {
+                'owner': owner,
+                'start_date': start_date,
+                'retries': 1,
+            }
+            
             dag = DAG(
-                dag_id='framework_test_windows',
-                default_args={
-                    'owner': 'framework',
-                    'start_date': datetime(2024, 1, 1),
-                    'retries': 1,
-                },
-                description='Test DAG for Windows framework setup',
-                schedule_interval=None,
-                catchup=False,
-                tags=['framework', 'test', 'windows']
+                dag_id=dag_id,
+                default_args=default_args,
+                description=description,
+                schedule=schedule_interval,
+                catchup=catchup,
+                tags=tags
             )
             
-            dummy_task = DummyOperator(
-                task_id='test_task_windows',
-                dag=dag
-            )
+            # Create tasks
+            tasks = {}
+            for task_config in config.get('tasks', []):
+                task_id = task_config.get('task_id')
+                operator_type = task_config.get('operator_type')
+                description = task_config.get('description', 'No description provided')
+                depends_on = task_config.get('depends_on', [])
+                
+                # Use the operator creation functions from other modules
+                if operator_type == 'dummy':
+                    task = EmptyOperator(
+                        task_id=task_id,
+                        dag=dag,
+                        doc=description
+                    )
+                elif operator_type == 'source':
+                    task = create_source_operator(task_id=task_id, dag=dag, **task_config)
+                elif operator_type == 'sink':
+                    task = create_sink_operator(task_id=task_id, dag=dag, **task_config)
+                elif operator_type == 'sql_transform':
+                    task = create_sql_transform_operator(task_id=task_id, dag=dag, **task_config)
+                elif operator_type == 'python_transform':
+                    task = create_python_transform_operator(task_id=task_id, dag=dag, **task_config)
+                elif operator_type == 'custom_script_transform':
+                    task = create_custom_script_transform_operator(task_id=task_id, dag=dag, **task_config)
+                elif operator_type == 'validation_transform':
+                    task = create_validation_transform_operator(task_id=task_id, dag=dag, **task_config)
+                elif operator_type == 'aggregation_transform':
+                    task = create_aggregation_transform_operator(task_id=task_id, dag=dag, **task_config)
+                elif operator_type == 'data_quality':
+                    task = create_data_quality_operator(task_id=task_id, dag=dag, **task_config)
+                elif operator_type == 'data_profile':
+                    task = create_data_profile_operator(task_id=task_id, dag=dag, **task_config)
+                else:
+                    logger.warning(f"Unsupported operator type: {operator_type} for task {task_id}")
+                    continue  # Skip unsupported operator types
+                
+                tasks[task_id] = task
+                
+                # Set task dependencies
+                for dependency in depends_on:
+                    if dependency in tasks:
+                        task.set_upstream(tasks[dependency])
+                    else:
+                        logger.warning(f"Dependency {dependency} not found for task {task_id}")
             
             return dag
             

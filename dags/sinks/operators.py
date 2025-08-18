@@ -1,5 +1,5 @@
 """
-Sink Operators Module
+Sink Operators Module - Airflow 3.x Compatible (without pysftp)
 Handles data loading to various data sinks with support for different write modes
 """
 
@@ -14,23 +14,21 @@ from psycopg2.extras import RealDictCursor, execute_values
 import clickhouse_connect
 from pymongo import MongoClient
 from azure.storage.blob import BlobServiceClient
-import pysftp
+import paramiko
 import requests
 
 from airflow.models import BaseOperator
 from airflow.hooks.base import BaseHook
-from airflow.utils.decorators import apply_defaults
 
 from core.config import SinkConfig, SinkType, WriteMode
 
 logger = logging.getLogger(__name__)
 
 class BaseSinkOperator(BaseOperator):
-    """Base class for all sink operators"""
+    """Base class for all sink operators - Airflow 3.x compatible"""
     
-    @apply_defaults
-    def __init__(self, sink_config: SinkConfig, data_source_task_id: str = None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, sink_config: SinkConfig, data_source_task_id: str = None, **kwargs):
+        super().__init__(**kwargs)
         self.sink_config = sink_config
         self.data_source_task_id = data_source_task_id
     
@@ -531,7 +529,7 @@ class DataLakeGen2SinkOperator(BaseSinkOperator):
         return total_records
 
 class SFTPSinkOperator(BaseSinkOperator):
-    """Load data to SFTP server"""
+    """Load data to SFTP server using paramiko directly"""
     
     def load_data(self, data: Union[List[Dict], pd.DataFrame], context) -> int:
         """Load data to SFTP server"""
@@ -545,50 +543,62 @@ class SFTPSinkOperator(BaseSinkOperator):
         
         connection = BaseHook.get_connection(self.sink_config.connection_id)
         
-        # SFTP connection options
-        cnopts = pysftp.CnOpts()
-        cnopts.hostkeys = None  # Disable host key checking for demo
-        
         try:
-            with pysftp.Connection(
-                host=connection.host,
+            # Create SSH client
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            
+            # Connect to SFTP server
+            ssh.connect(
+                hostname=connection.host,
                 port=connection.port or 22,
                 username=connection.login,
-                password=connection.password,
-                cnopts=cnopts
-            ) as sftp:
-                
-                # Format file path
-                execution_date = context['execution_date']
-                actual_file_path = self.sink_config.file_path.format(
-                    year=execution_date.year,
-                    month=execution_date.month,
-                    day=execution_date.day,
-                    ds=context['ds']
-                )
-                
-                # Create directory if needed
-                directory = str(Path(actual_file_path).parent)
+                password=connection.password
+            )
+            
+            sftp = ssh.open_sftp()
+            
+            # Format file path
+            execution_date = context['execution_date']
+            actual_file_path = self.sink_config.file_path.format(
+                year=execution_date.year,
+                month=execution_date.month,
+                day=execution_date.day,
+                ds=context['ds']
+            )
+            
+            # Create directory if needed
+            directory = str(Path(actual_file_path).parent)
+            try:
                 sftp.makedirs(directory)
-                
-                # Convert data to appropriate format
-                import io
-                if self.sink_config.file_format == 'json':
-                    content = df.to_json(orient='records', indent=2)
-                    file_buffer = io.StringIO(content)
-                elif self.sink_config.file_format == 'csv':
-                    content = df.to_csv(index=False)
-                    file_buffer = io.StringIO(content)
-                else:
-                    raise ValueError(f"Unsupported file format: {self.sink_config.file_format}")
-                
-                # Upload file
-                sftp.putfo(file_buffer, actual_file_path)
-                return len(df)
+            except:
+                pass  # Directory might already exist
+            
+            # Convert data to appropriate format
+            import io
+            if self.sink_config.file_format == 'json':
+                content = df.to_json(orient='records', indent=2)
+                file_buffer = io.StringIO(content)
+            elif self.sink_config.file_format == 'csv':
+                content = df.to_csv(index=False)
+                file_buffer = io.StringIO(content)
+            else:
+                raise ValueError(f"Unsupported file format: {self.sink_config.file_format}")
+            
+            # Upload file
+            with sftp.open(actual_file_path, 'w') as remote_file:
+                remote_file.write(file_buffer.getvalue())
+            
+            return len(df)
                 
         except Exception as e:
             logger.error(f"SFTP upload failed: {str(e)}")
             raise
+        finally:
+            if 'sftp' in locals():
+                sftp.close()
+            if 'ssh' in locals():
+                ssh.close()
 
 class RestAPISinkOperator(BaseSinkOperator):
     """Load data to REST API endpoint"""

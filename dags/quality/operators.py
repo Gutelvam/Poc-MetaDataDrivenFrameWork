@@ -1,5 +1,5 @@
 """
-Data Quality Operators Module
+Data Quality Operators Module - Airflow 3.x Compatible
 Handles data quality checks with various rules and thresholds
 """
 
@@ -12,7 +12,6 @@ from typing import Dict, List, Any, Optional, Union, Tuple
 from dataclasses import asdict
 
 from airflow.models import BaseOperator
-from airflow.utils.decorators import apply_defaults
 from airflow.exceptions import AirflowException
 
 from core.config import DataQualityRule
@@ -309,18 +308,16 @@ class DataQualityChecker:
             )
 
 class DataQualityOperator(BaseOperator):
-    """Operator for running data quality checks"""
+    """Operator for running data quality checks - Airflow 3.x compatible"""
     
-    @apply_defaults
     def __init__(
         self,
         quality_rules: List[DataQualityRule],
         data_source_task_id: str = None,
         fail_on_error: bool = False,
-        *args,
         **kwargs
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self.quality_rules = quality_rules
         self.data_source_task_id = data_source_task_id
         self.fail_on_error = fail_on_error
@@ -421,18 +418,16 @@ class DataQualityOperator(BaseOperator):
             raise ValueError(f"Unsupported quality rule type: {rule.rule_type}")
 
 class DataProfileOperator(BaseOperator):
-    """Operator for data profiling and statistics"""
+    """Operator for data profiling and statistics - Airflow 3.x compatible"""
     
-    @apply_defaults
     def __init__(
         self,
         data_source_task_id: str = None,
         include_columns: Optional[List[str]] = None,
         exclude_columns: Optional[List[str]] = None,
-        *args,
         **kwargs
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self.data_source_task_id = data_source_task_id
         self.include_columns = include_columns
         self.exclude_columns = exclude_columns or []

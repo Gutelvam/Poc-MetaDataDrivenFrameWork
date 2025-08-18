@@ -1,5 +1,5 @@
 """
-Source Operators Module
+Source Operators Module - Airflow 3.x Compatible (without pysftp)
 Handles data extraction from various data sources
 """
 
@@ -17,22 +17,19 @@ from psycopg2.extras import RealDictCursor
 import paramiko
 from pymongo import MongoClient
 from sqlalchemy import create_engine
-import pysftp
 
 from airflow.models import BaseOperator
 from airflow.hooks.base import BaseHook
-from airflow.utils.decorators import apply_defaults
 
 from core.config import SourceConfig, SourceType
 
 logger = logging.getLogger(__name__)
 
 class BaseSourceOperator(BaseOperator):
-    """Base class for all source operators"""
+    """Base class for all source operators - Airflow 3.x compatible"""
     
-    @apply_defaults
-    def __init__(self, source_config: SourceConfig, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, source_config: SourceConfig, **kwargs):
+        super().__init__(**kwargs)
         self.source_config = source_config
     
     def execute(self, context):
@@ -55,9 +52,6 @@ class PostgreSQLSourceOperator(BaseSourceOperator):
     
     def extract_data(self, context) -> List[Dict]:
         connection = BaseHook.get_connection(self.source_config.connection_id)
-        
-        # Build connection string
-        conn_str = f"postgresql://{connection.login}:{connection.password}@{connection.host}:{connection.port}/{connection.schema}"
         
         try:
             # Connect using psycopg2 for better control
@@ -360,56 +354,65 @@ class DataLakeGen2SourceOperator(BaseSourceOperator):
         return fnmatch.fnmatch(filename, pattern)
 
 class SFTPSourceOperator(BaseSourceOperator):
-    """Extract data from SFTP server"""
+    """Extract data from SFTP server using paramiko directly"""
     
     def extract_data(self, context) -> Union[List[Dict], bytes]:
         connection = BaseHook.get_connection(self.source_config.connection_id)
         
-        # SFTP connection options
-        cnopts = pysftp.CnOpts()
-        cnopts.hostkeys = None  # Disable host key checking for demo
-        
         try:
-            with pysftp.Connection(
-                host=connection.host,
+            # Create SSH client
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            
+            # Connect to SFTP server
+            ssh.connect(
+                hostname=connection.host,
                 port=connection.port or 22,
                 username=connection.login,
-                password=connection.password,
-                cnopts=cnopts
-            ) as sftp:
+                password=connection.password
+            )
+            
+            sftp = ssh.open_sftp()
+            
+            # Format file path with execution context
+            execution_date = context['execution_date']
+            actual_file_path = self.source_config.file_path.format(
+                year=execution_date.year,
+                month=execution_date.month,
+                day=execution_date.day,
+                ds=context['ds']
+            )
+            
+            # Check if file exists
+            try:
+                sftp.stat(actual_file_path)
+            except FileNotFoundError:
+                logger.warning(f"File does not exist: {actual_file_path}")
+                return []
+            
+            # Download file to memory
+            import io
+            file_content = io.BytesIO()
+            sftp.getfo(actual_file_path, file_content)
+            file_content.seek(0)
+            
+            # Parse based on format
+            if self.source_config.file_format == 'json':
+                return json.loads(file_content.read().decode('utf-8'))
+            elif self.source_config.file_format == 'csv':
+                df = pd.read_csv(file_content)
+                return df.to_dict('records')
+            else:
+                return file_content.read()
                 
-                # Format file path with execution context
-                execution_date = context['execution_date']
-                actual_file_path = self.source_config.file_path.format(
-                    year=execution_date.year,
-                    month=execution_date.month,
-                    day=execution_date.day,
-                    ds=context['ds']
-                )
-                
-                # Check if file exists
-                if not sftp.exists(actual_file_path):
-                    logger.warning(f"File does not exist: {actual_file_path}")
-                    return []
-                
-                # Download file to memory
-                import io
-                file_content = io.BytesIO()
-                sftp.getfo(actual_file_path, file_content)
-                file_content.seek(0)
-                
-                # Parse based on format
-                if self.source_config.file_format == 'json':
-                    return json.loads(file_content.read().decode('utf-8'))
-                elif self.source_config.file_format == 'csv':
-                    df = pd.read_csv(file_content)
-                    return df.to_dict('records')
-                else:
-                    return file_content.read()
-                    
         except Exception as e:
             logger.error(f"SFTP extraction failed: {str(e)}")
             raise
+        finally:
+            if 'sftp' in locals():
+                sftp.close()
+            if 'ssh' in locals():
+                ssh.close()
 
 class RestAPISourceOperator(BaseSourceOperator):
     """Extract data from REST API"""
@@ -461,6 +464,8 @@ class FileSourceOperator(BaseSourceOperator):
     """Extract data from local files"""
     
     def extract_data(self, context) -> List[Dict]:
+        from pathlib import Path
+        
         # Format file path with execution context
         execution_date = context['execution_date']
         actual_file_path = self.source_config.file_path.format(

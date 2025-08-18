@@ -11,9 +11,10 @@ x-airflow-common:
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__API__SECRET_KEY: 'framework_secret_key_change_in_production'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # Airflow 3.x: Simplified authentication (no traditional web login)
+    # Airflow 3.x: Simplified authentication
     AIRFLOW__WEBSERVER__AUTHENTICATE: 'false'
-    # AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.default'
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    # Framework specific
     FRAMEWORK_METADATA_PATH: /opt/airflow/metadata
     PYTHONPATH: /opt/airflow/dags:/opt/airflow
     COMPOSE_CONVERT_WINDOWS_PATHS: 1
@@ -70,7 +71,7 @@ services:
       start_period: 30s
     restart: always
 
-  # YOUR ORIGINAL API-SERVER (replaces webserver in Airflow 3.x)
+  # AIRFLOW 3.x API-SERVER (substitui o webserver)
   airflow-api-server:
     <<: *airflow-common
     command: api-server
@@ -88,7 +89,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # YOUR ORIGINAL SCHEDULER
+  # AIRFLOW 3.x SCHEDULER
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
@@ -104,7 +105,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # YOUR ORIGINAL TRIGGERER
+  # AIRFLOW 3.x TRIGGERER
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
@@ -120,7 +121,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # INIT: Airflow 3.x compatible (no users command needed)
+  # INIT: Airflow 3.x compatible initialization
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
@@ -204,7 +205,6 @@ services:
         echo "🔓 Acesso direto (sem login) ou use API"
         echo "⚡ Sua arquitetura original mantida!"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'
@@ -228,9 +228,14 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: false
+      # New environment variables to add:
+      GF_LIVE_STREAM_ENABLED: true
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     volumes:
       - grafana-data:/var/lib/grafana
     restart: unless-stopped
+
 
 
   # mongodb:
@@ -266,10 +271,3 @@ volumes:
   grafana-data:
   # mongodb-data:
   # clickhouse-data:
-  
-
-
-
-
-
-  

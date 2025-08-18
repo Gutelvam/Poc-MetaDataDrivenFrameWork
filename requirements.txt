@@ -9,7 +9,7 @@ pymongo==4.14.0
 clickhouse-connect
 sqlalchemy
 
-# Data processing (FIXED: Python 3.12 compatible versions)
+# Data processing (Python 3.12 compatible versions)
 pandas==2.1.4
 numpy==1.26.4
 pyarrow
@@ -20,6 +20,7 @@ requests==2.31.0
 pyyaml==6.0.1
 python-dateutil==2.8.2
 python-dotenv==1.1.1
+PyYAML
 
 # SQL processing
 pandasql==0.7.3
@@ -33,9 +34,8 @@ azure-storage-blob
 boto3
 google-cloud-storage
 
-# File transfer
-paramiko
-pysftp
+# File transfer (FIXED: using paramiko directly instead of pysftp)
+paramiko>=3.0.0
 
 # HTTP and APIs
 urllib3
@@ -43,3 +43,6 @@ urllib3
 # Machine Learning (optional)
 sentence-transformers
 scikit-learn
+
+# NOTE: pysftp removed due to incompatibility with newer paramiko versions
+# SFTP functionality is implemented directly using paramiko

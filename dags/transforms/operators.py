@@ -1,5 +1,5 @@
 """
-Transform Operators Module
+Transform Operators Module - Airflow 3.x Compatible
 Handles data transformations using SQL, Python, and custom scripts
 """
 
@@ -9,6 +9,7 @@ import logging
 import subprocess
 import sys
 import importlib.util
+import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Union, Callable
 from pathlib import Path
@@ -17,7 +18,6 @@ from airflow.models import BaseOperator
 from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 from airflow.hooks.base import BaseHook
-from airflow.utils.decorators import apply_defaults
 from airflow.exceptions import AirflowException
 
 from core.config import TaskConfig
@@ -25,18 +25,16 @@ from core.config import TaskConfig
 logger = logging.getLogger(__name__)
 
 class SQLTransformOperator(BaseOperator):
-    """Execute SQL transformations on data"""
+    """Execute SQL transformations on data - Airflow 3.x compatible"""
     
-    @apply_defaults
     def __init__(
         self,
         sql_query: str,
         data_source_task_ids: Union[str, List[str]],
         connection_id: str = None,
-        *args,
         **kwargs
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self.sql_query = sql_query
         self.data_source_task_ids = data_source_task_ids if isinstance(data_source_task_ids, list) else [data_source_task_ids]
         self.connection_id = connection_id
@@ -103,19 +101,17 @@ class SQLTransformOperator(BaseOperator):
             raise AirflowException(f"SQL transformation failed: {str(e)}")
 
 class PythonTransformOperator(BaseOperator):
-    """Execute Python transformations on data"""
+    """Execute Python transformations on data - Airflow 3.x compatible"""
     
-    @apply_defaults
     def __init__(
         self,
         python_callable: Union[str, Callable],
         data_source_task_ids: Union[str, List[str]],
         op_args: Optional[tuple] = None,
         op_kwargs: Optional[Dict] = None,
-        *args,
         **kwargs
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self.python_callable = python_callable
         self.data_source_task_ids = data_source_task_ids if isinstance(data_source_task_ids, list) else [data_source_task_ids]
         self.op_args = op_args or ()
@@ -165,9 +161,8 @@ class PythonTransformOperator(BaseOperator):
             raise AirflowException(f"Failed to resolve callable '{callable_string}': {str(e)}")
 
 class CustomScriptTransformOperator(BaseOperator):
-    """Execute custom scripts for data transformation"""
+    """Execute custom scripts for data transformation - Airflow 3.x compatible"""
     
-    @apply_defaults
     def __init__(
         self,
         script_path: str,
@@ -175,10 +170,9 @@ class CustomScriptTransformOperator(BaseOperator):
         script_args: Optional[List[str]] = None,
         script_env: Optional[Dict[str, str]] = None,
         script_type: str = "python",  # python, bash, R
-        *args,
         **kwargs
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self.script_path = script_path
         self.data_source_task_ids = data_source_task_ids if isinstance(data_source_task_ids, list) else [data_source_task_ids]
         self.script_args = script_args or []
@@ -328,18 +322,16 @@ class CustomScriptTransformOperator(BaseOperator):
             logger.warning(f"Failed to cleanup temp files: {str(e)}")
 
 class DataValidationTransformOperator(BaseOperator):
-    """Validate and clean data during transformation"""
+    """Validate and clean data during transformation - Airflow 3.x compatible"""
     
-    @apply_defaults
     def __init__(
         self,
         data_source_task_id: str,
         validation_rules: Dict[str, Any],
         drop_invalid: bool = False,
-        *args,
         **kwargs
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self.data_source_task_id = data_source_task_id
         self.validation_rules = validation_rules
         self.drop_invalid = drop_invalid
@@ -447,18 +439,16 @@ class DataValidationTransformOperator(BaseOperator):
         return df
 
 class AggregationTransformOperator(BaseOperator):
-    """Perform data aggregations"""
+    """Perform data aggregations - Airflow 3.x compatible"""
     
-    @apply_defaults
     def __init__(
         self,
         data_source_task_id: str,
         group_by_columns: List[str],
         aggregations: Dict[str, Union[str, List[str]]],
-        *args,
         **kwargs
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self.data_source_task_id = data_source_task_id
         self.group_by_columns = group_by_columns
         self.aggregations = aggregations

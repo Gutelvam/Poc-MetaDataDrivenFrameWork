@@ -1,5 +1,5 @@
 """
-Main DAG Entry Point
+Main DAG Entry Point - Airflow 3.x Compatible
 This file is placed in the main dags/ directory and imports the modular framework
 """
 
@@ -81,9 +81,9 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize framework: {str(e)}")
     
-    # Create a dummy DAG to show the error in AirflowUI
+    # Create a dummy DAG to show the error in Airflow UI
     from airflow import DAG
-    from airflow.operators.dummy import DummyOperator
+    from airflow.operators.empty import EmptyOperator  # Updated for Airflow 3.x
     from airflow.operators.python import PythonOperator
     from datetime import datetime, timedelta
     
@@ -99,7 +99,7 @@ except Exception as e:
             'retries': 0,
         },
         description='Framework initialization error - check logs',
-        schedule_interval=None,
+        schedule=None,  # Updated from schedule_interval
         catchup=False,
         tags=['error', 'framework']
     )
