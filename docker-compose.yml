@@ -1,3 +1,5 @@
+# docker-compose.yml - VERSÃO CORRIGIDA PARA AIRFLOW 3.0.x
+
 # Define o bloco de dependências comuns para ser reutilizado
 x-airflow-deps: &airflow-common-deps
   postgres:
@@ -8,24 +10,35 @@ x-airflow-common:
   build:
     context: .
     dockerfile: Dockerfile
+  
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
-    AIRFLOW__API__SECRET_KEY: 'framework_secret_key_change_in_production'
     
-    # Fixed Airflow 3.x authentication settings
+    # FIXED: Moved secret_key from [webserver] to [api] section for Airflow 3.x
+    AIRFLOW__API__SECRET_KEY: 'framework_secret_key_change_in_production'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    
+    # Updated authentication settings for Airflow 3.x
     AIRFLOW__WEBSERVER__AUTHENTICATE: 'true'
     AIRFLOW__WEBSERVER__AUTH_BACKEND: 'airflow.auth.backends.password_auth'
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
     AIRFLOW__WEBSERVER__RBAC: 'true'
     
+    # FIXED: Updated DAG discovery settings for Airflow 3.x
+    AIRFLOW__CORE__DAG_DISCOVERY_SAFE_MODE: 'false'
+    AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '300'
+    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: '30'  # ← MOVED from scheduler section
+    AIRFLOW__SCHEDULER__PARSING_PROCESSES: '2'
+  
+    
     # Framework specific
     FRAMEWORK_METADATA_PATH: /opt/airflow/metadata
     PYTHONPATH: /opt/airflow/dags:/opt/airflow
     COMPOSE_CONVERT_WINDOWS_PATHS: 1
+
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
@@ -77,14 +90,14 @@ services:
       start_period: 30s
     restart: always
 
-  # Fixed webserver with correct health check
+  # CORRIGIDO: webserver com comando e health check corretos para Airflow 3.x
   airflow-webserver:
     <<: *airflow-common
-    command: api-server
+    command: api-server  
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/airflow/health"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -95,7 +108,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # AIRFLOW 3.x SCHEDULER
+  # AIRFLOW 3.x SCHEDULER com configurações otimizadas
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
@@ -127,14 +140,14 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # Fixed initialization for Airflow 3.x
+  # Inicialização corrigida para Airflow 3.x
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
     command:
       - -c
       - |
-        echo "🚀 Inicializando Framework com Airflow 3.x..."
+        echo "🚀 Inicializando Framework com Airflow 3.0.x..."
         echo "=============================================="
         
         echo "⏳ Aguardando PostgreSQL..."
@@ -155,8 +168,14 @@ services:
         fi
         
         echo "👤 Criando usuário admin..."
-        # Fixed user creation command for Airflow 3.x
-        airflow users create --username admin --firstname Framework --lastname Admin --role Admin --email admin@framework.com --password admin || echo "⚠️ Usuário já existe ou erro na criação"
+        # Comando corrigido para Airflow 3.x
+        airflow users create\
+          --username admin \
+          --firstname Framework \
+          --lastname Admin \
+          --role Admin \
+          --email admin@framework.com \
+          --password admin || echo "⚠️ Usuário já existe ou erro na criação"
         
         echo "📁 Criando estrutura de diretórios..."
         mkdir -p /sources/logs /sources/dags /sources/plugins /sources/metadata /sources/config
@@ -167,7 +186,7 @@ services:
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "🌐 Acesse: http://localhost:8080"
         echo "👤 Login: admin / admin"
-        echo "📖 Airflow 3.x - Webserver + Scheduler + Triggerer"
+        echo "📖 Airflow 3.0.x - Webserver + Scheduler + Triggerer"
         echo "⚡ Sua arquitetura original mantida!"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     environment:
@@ -199,8 +218,7 @@ services:
       - grafana-data:/var/lib/grafana
     restart: unless-stopped
 
-
-
+  # Serviços opcionais comentados
   # mongodb:
   #   image: mongo:7.0
   #   ports:
