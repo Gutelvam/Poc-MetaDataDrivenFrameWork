@@ -1,3 +1,8 @@
+# Define o bloco de dependências comuns para ser reutilizado
+x-airflow-deps: &airflow-common-deps
+  postgres:
+    condition: service_healthy
+
 x-airflow-common:
   &airflow-common
   build:
@@ -8,12 +13,15 @@ x-airflow-common:
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
     AIRFLOW__API__SECRET_KEY: 'framework_secret_key_change_in_production'
-    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # Airflow 3.x: Simplified authentication
-    AIRFLOW__WEBSERVER__AUTHENTICATE: 'false'
+    
+    # Fixed Airflow 3.x authentication settings
+    AIRFLOW__WEBSERVER__AUTHENTICATE: 'true'
+    AIRFLOW__WEBSERVER__AUTH_BACKEND: 'airflow.auth.backends.password_auth'
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    AIRFLOW__WEBSERVER__RBAC: 'true'
+    
     # Framework specific
     FRAMEWORK_METADATA_PATH: /opt/airflow/metadata
     PYTHONPATH: /opt/airflow/dags:/opt/airflow
@@ -25,9 +33,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/metadata:/opt/airflow/metadata
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
   user: "${AIRFLOW_UID:-50000}:0"
-  depends_on: &airflow-common-depends-on
-    postgres:
-      condition: service_healthy
+  depends_on: *airflow-common-deps
 
 services:
   postgres:
@@ -71,21 +77,21 @@ services:
       start_period: 30s
     restart: always
 
-  # AIRFLOW 3.x API-SERVER (substitui o webserver)
-  airflow-api-server:
+  # Fixed webserver with correct health check
+  airflow-webserver:
     <<: *airflow-common
     command: api-server
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/airflow/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
     restart: always
     depends_on:
-      <<: *airflow-common-depends-on
+      <<: *airflow-common-deps
       airflow-init:
         condition: service_completed_successfully
 
@@ -101,7 +107,7 @@ services:
       start_period: 30s
     restart: always
     depends_on:
-      <<: *airflow-common-depends-on
+      <<: *airflow-common-deps
       airflow-init:
         condition: service_completed_successfully
 
@@ -117,11 +123,11 @@ services:
       start_period: 30s
     restart: always
     depends_on:
-      <<: *airflow-common-depends-on
+      <<: *airflow-common-deps
       airflow-init:
         condition: service_completed_successfully
 
-  # INIT: Airflow 3.x compatible initialization
+  # Fixed initialization for Airflow 3.x
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
@@ -142,56 +148,15 @@ services:
         airflow db migrate
         
         if [ $? -eq 0 ]; then
-            echo "✅ Banco de dados migrado com sucesso"
+            echo "✅ Banco de dados inicializado com sucesso"
         else
-            echo "❌ Falha na migração do banco"
+            echo "❌ Falha na inicialização do banco"
             exit 1
         fi
         
-        echo "👤 Airflow 3.x - Configurando autenticação..."
-        echo "   ℹ️  Airflow 3.x usa autenticação simplificada"
-        echo "   ℹ️  Acesso direto sem login tradicional"
-        
-        # Create default admin user directly in database (Airflow 3.x method)
-        python3 -c "
-        import sys
-        sys.path.insert(0, '/opt/airflow')
-        try:
-            from airflow import settings
-            from airflow.models import User
-            from sqlalchemy.orm import sessionmaker
-            from sqlalchemy import create_engine
-            
-            # Create database session
-            engine = create_engine('postgresql+psycopg2://airflow:airflow@postgres/airflow')
-            Session = sessionmaker(bind=engine)
-            session = Session()
-            
-            # Check if admin user exists
-            admin_user = session.query(User).filter(User.username == 'admin').first()
-            
-            if not admin_user:
-                # Create admin user
-                admin_user = User(
-                    username='admin',
-                    email='admin@framework.com',
-                    first_name='Framework',
-                    last_name='Admin',
-                    is_active=True,
-                    is_superuser=True
-                )
-                session.add(admin_user)
-                session.commit()
-                print('✅ Usuário admin criado com sucesso via database')
-            else:
-                print('⚠️ Usuário admin já existe')
-            
-            session.close()
-            
-        except Exception as e:
-            print(f'ℹ️ Airflow 3.x: {e}')
-            print('ℹ️ Continuando sem criação de usuário - acesso direto disponível')
-        "
+        echo "👤 Criando usuário admin..."
+        # Fixed user creation command for Airflow 3.x
+        airflow users create --username admin --firstname Framework --lastname Admin --role Admin --email admin@framework.com --password admin || echo "⚠️ Usuário já existe ou erro na criação"
         
         echo "📁 Criando estrutura de diretórios..."
         mkdir -p /sources/logs /sources/dags /sources/plugins /sources/metadata /sources/config
@@ -201,13 +166,12 @@ services:
         echo "🎉 Inicialização concluída com sucesso!"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "🌐 Acesse: http://localhost:8080"
-        echo "📖 Airflow 3.x - API Server + Scheduler + Triggerer"
-        echo "🔓 Acesso direto (sem login) ou use API"
+        echo "👤 Login: admin / admin"
+        echo "📖 Airflow 3.x - Webserver + Scheduler + Triggerer"
         echo "⚡ Sua arquitetura original mantida!"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     environment:
       <<: *airflow-common-env
-      _AIRFLOW_DB_MIGRATE: 'true'
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
@@ -228,7 +192,6 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: false
-      # New environment variables to add:
       GF_LIVE_STREAM_ENABLED: true
       GF_AUTH_ANONYMOUS_ENABLED: true
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer

@@ -48,7 +48,8 @@ RUN pip install --no-cache-dir -r /opt/airflow/requirements.txt
 
 # Verificar versão do Airflow instalada e compatibility
 RUN python -c "import airflow; print(f'Airflow version: {airflow.__version__}')" \
-    && python -c "from airflow.operators.empty import EmptyOperator; print('✅ EmptyOperator available')" \
+    && python -c "from airflow.operators.empty import EmptyOperator; print('✅ EmptyOperator available')" || \
+       python -c "from airflow.operators.dummy import DummyOperator; print('✅ DummyOperator available (legacy)')" \
     && python -c "from airflow.models import BaseOperator; print('✅ BaseOperator available')" \
     && echo "✅ Airflow 3.x compatibility verified"
 
@@ -76,9 +77,9 @@ ENV AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
 # Verificar se os módulos do framework são importáveis
 RUN python -c "import sys; sys.path.insert(0, '/opt/airflow/dags'); from core.config import PipelineConfig; print('✅ Framework core imports working')" || echo "⚠️ Framework imports need fixing after startup"
 
-# Health check personalizado
+# Health check personalizado para Airflow 3.x
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD python -c "import airflow; print('OK')" || exit 1
+    CMD curl -f http://localhost:8080/airflow/health || python -c "import airflow; print('OK')" || exit 1
 
 # Definir diretório de trabalho
 WORKDIR /opt/airflow

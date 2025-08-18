@@ -19,17 +19,6 @@ from datetime import datetime, timedelta
 # Import framework modules
 from core.config import PipelineConfig, TaskConfig, OperatorType
 from metadata.manager import MetadataManager
-from sources.operators import create_source_operator
-from sinks.operators import create_sink_operator
-from transforms.operators import (
-    create_sql_transform_operator, create_python_transform_operator,
-    create_custom_script_transform_operator, create_validation_transform_operator,
-    create_aggregation_transform_operator
-)
-from quality.operators import create_data_quality_operator, create_data_profile_operator
-
-# Import the existing DAG factory logic
-from dag_factory import DAGFactory
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +27,8 @@ class DynamicDAGGenerator:
     
     def __init__(self, metadata_path: str = "/opt/airflow/metadata"):
         self.metadata_manager = MetadataManager(metadata_path)
+        # Import DAGFactory lazily to avoid circular imports
+        from dag_factory import DAGFactory
         self.dag_factory = DAGFactory(self.metadata_manager)
     
     def generate_dags(self) -> Dict[str, DAG]:
@@ -50,7 +41,8 @@ class DynamicDAGGenerator:
             
             for config_file in config_files:
                 try:
-                    dag = self.dag_factory.create_dag(config_file)
+                    full_path = Path(self.metadata_manager.metadata_path) / config_file
+                    dag = self.dag_factory.create_dag(str(full_path))
                     dags[dag.dag_id] = dag
                     logger.info(f"Successfully generated DAG: {dag.dag_id}")
                     
