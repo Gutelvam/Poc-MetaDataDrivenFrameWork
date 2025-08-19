@@ -1,0 +1,31 @@
+{"timestamp":"2025-08-19T11:48:09.406559","level":"info","event":"DAG bundles loaded: dags-folder","logger":"airflow.dag_processing.bundles.manager.DagBundlesManager"}
+{"timestamp":"2025-08-19T11:48:09.406992","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/main.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T11:48:09.411601","level":"info","event":"🚀 Framework main.py starting...","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.414188","level":"info","event":"✅ Created test DAG: framework_main_test","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.417117","level":"info","event":"Found 1 YAML files: ['test_framework.yaml']","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.450707","level":"info","event":"✅ Successfully imported framework modules","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.450826","level":"info","event":"Processing test_framework.yaml...","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.450941","level":"info","event":"Creating DAG from: /opt/airflow/metadata/test_framework.yaml","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.461854","level":"info","event":"Created task: start_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462112","level":"info","event":"Created task: extract_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462287","level":"info","event":"Created task: transform_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462435","level":"info","event":"Created task: quality_check_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462576","level":"info","event":"Created task: load_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462702","level":"info","event":"Created task: end_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462764","level":"info","event":"Set dependency: start_test >> extract_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462808","level":"info","event":"Set dependency: extract_test >> transform_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462879","level":"info","event":"Set dependency: transform_test >> quality_check_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.462946","level":"info","event":"Set dependency: quality_check_test >> load_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.463001","level":"info","event":"Set dependency: load_test >> end_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.463035","level":"info","event":"Successfully created DAG test_framework_dag with 6 tasks","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.463070","level":"info","event":"✅ Created DAG: test_framework_dag","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.463108","level":"info","event":"✅ Created 1 metadata DAGs: ['test_framework_dag']","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.463140","level":"info","event":"🎉 Total DAGs created: 2","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.463169","level":"info","event":"📤 Exporting DAGs to global namespace...","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.463198","level":"info","event":"   ✅ Exported: framework_main_test","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.463226","level":"info","event":"   ✅ Exported: test_framework_dag","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.463257","level":"info","event":"🎯 Final exported DAGs: ['framework_main_test', 'test_framework_dag']","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.463285","level":"info","event":"📋 Framework main.py completed successfully!","logger":"unusual_prefix_8f3fa82684731fec338e7a38d6fbf711ac450beb_main"}
+{"timestamp":"2025-08-19T11:48:09.488002","level":"info","event":"Mock transform in transform_test","logger":"dag_factory"}
+{"timestamp":"2025-08-19T11:48:09.498803","level":"info","event":"Done. Returned value was: {'transformed': True, 'input_sources': 1}","logger":"airflow.task.operators.airflow.providers.standard.operators.python.PythonOperator"}
+{"timestamp":"2025-08-19T11:48:09.499045","level":"info","event":"Pushing xcom","ti":"RuntimeTaskInstance(id=UUID('0198c228-759d-7bac-b53b-9c392ffee101'), task_id='transform_test', dag_id='test_framework_dag', run_id='manual__2025-08-19T11:48:08.196534+00:00', try_number=1, map_index=-1, hostname='e555466241a4', context_carrier=None, task=<Task(PythonOperator): transform_test>, bundle_instance=LocalDagBundle(name=dags-folder), max_tries=1, start_date=datetime.datetime(2025, 8, 19, 11, 48, 9, 380791, tzinfo=datetime.timezone.utc), end_date=None, state=<TaskInstanceState.RUNNING: 'running'>, is_mapped=False, rendered_map_index=None, log_url='http://localhost:8080/dags/test_framework_dag/runs/manual__2025-08-19T11%3A48%3A08.196534%2B00%3A00/tasks/transform_test?try_number=1')","logger":"task"}

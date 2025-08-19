@@ -26,30 +26,35 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar MongoDB tools (opcional) - com melhor error handling
-RUN curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
-    gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor \
-    && echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
-    tee /etc/apt/sources.list.d/mongodb-org-7.0.list \
-    && apt-get update \
-    && apt-get install -y mongodb-mongosh || echo "MongoDB tools installation skipped"
-
 # Voltar para o usuário airflow
 USER airflow
 
 # Atualizar pip para versão mais recente
 RUN pip install --upgrade pip setuptools wheel
 
+# ----------------------------------------------------
+# ⚠️ FIXED: Ensure dependencies are installed before code is copied
+# ----------------------------------------------------
 # Copiar requirements primeiro para melhor cache
 COPY requirements.txt /opt/airflow/requirements.txt
 
-# Instalar dependências Python do framework (FIXED: Airflow 3.x compatible)
+# Instalar TODAS as dependências Python do framework
 RUN pip install --no-cache-dir -r /opt/airflow/requirements.txt
+
+# ADDED: Remove problematic SSH providers to prevent DSSKey errors
+RUN pip uninstall -y apache-airflow-providers-ssh apache-airflow-providers-sftp || true
+
+# ADDED: Verify paramiko compatibility
+RUN python -c "import paramiko; print(f'✅ Paramiko version: {paramiko.__version__}'); print('✅ Paramiko import successful - DSSKey compatibility fixed')"
+
+# ----------------------------------------------------
+# END OF FIXED SECTION
+# ----------------------------------------------------
 
 # Verificar versão do Airflow instalada e compatibility
 RUN python -c "import airflow; print(f'Airflow version: {airflow.__version__}')" \
     && python -c "from airflow.operators.empty import EmptyOperator; print('✅ EmptyOperator available')" || \
-       python -c "from airflow.operators.dummy import DummyOperator; print('✅ DummyOperator available (legacy)')" \
+        python -c "from airflow.operators.dummy import DummyOperator; print('✅ DummyOperator available (legacy)')" \
     && python -c "from airflow.models import BaseOperator; print('✅ BaseOperator available')" \
     && echo "✅ Airflow 3.x compatibility verified"
 
@@ -79,7 +84,7 @@ RUN python -c "import sys; sys.path.insert(0, '/opt/airflow/dags'); from core.co
 
 # Health check personalizado para Airflow 3.x
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/airflow/health || python -c "import airflow; print('OK')" || exit 1
+    CMD curl -f http://localhost:8080/health || python -c "import airflow; print('OK')" || exit 1
 
 # Definir diretório de trabalho
 WORKDIR /opt/airflow

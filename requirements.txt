@@ -1,63 +1,101 @@
-# Core Airflow Providers
-apache-airflow-providers-celery
-apache-airflow-providers-postgres
-apache-airflow-providers-redis
+# Fixed requirements.txt for Airflow 3.x Framework
+# Addresses paramiko DSSKey compatibility issues
 
-# Database Connectors
-psycopg2-binary>=2.9.9
-pymongo>=4.14.0
-sqlalchemy>=1.4.46
-clickhouse-connect
+# Core Airflow (should be installed by base image)
+# apache-airflow[postgres,password]==3.0.1
 
-# Data Processing
-pandas>=2.1.4
-numpy>=1.26.4
-pyarrow>=10.0.0
-scipy
+# FIXED: Use compatible paramiko version that still has DSSKey
+paramiko>=2.12.0,<3.0.0
 
-# Core Utilities
-requests>=2.31.0
-pyyaml>=6.0.1
-python-dateutil==2.8.2
-python-dotenv>=1.1.1
-urllib3
+# Database drivers
+psycopg2-binary>=2.9.5
+clickhouse-connect>=0.6.0
+pymongo>=4.3.3
+
+# Data processing
+pandas>=1.5.0
+numpy>=1.24.0
+pandasql>=0.7.3  # For SQL transforms
+
+# HTTP requests
+requests>=2.28.0
 httpx>=0.24.0
 
-# SQL Processing
-pandasql==0.7.3
+# Azure integration (without problematic versions)
+azure-storage-blob>=12.14.0
 
-# Validation and Schemas
-jsonschema==4.25.0
-cerberus
-pydantic>=2.0.0
+# clickhouse-connect==0.8.18 # Or another specific version
+clickhouse-sqlalchemy==0.2.9  # For SQLAlchemy integration with ClickHouse
 
-# Cloud Storage
-azure-storage-blob
-boto3
-google-cloud-storage
 
-# File Transfer
-paramiko>=3.0.0
+# Alternative to direct SSH providers (avoid paramiko issues)
+# We'll use paramiko directly in our operators instead of airflow providers
+fabric>=3.0.0  # Alternative SSH library
 
-# Monitoring and Logging
-prometheus_client>=0.16.0
-structlog>=23.1.0
+# Data formats
+PyYAML>=6.0
+python-dateutil>=2.8.0
 
-# Authentication
-flask-login>=0.6.2
-werkzeug>=2.2.3
+# Optional: Monitoring and observability
+prometheus-client>=0.15.0
 
-# Development Tools
-pytest>=7.2.1
-black>=23.1.0
-flake8>=6.0.0
-mypy>=1.0.1
+# Data quality and validation
+cerberus>=1.3.4
+jsonschema>=4.0.0
 
-# Machine Learning (optional)
-sentence-transformers
-scikit-learn
+# Development and testing
+pytest>=7.0.0
+pytest-mock>=3.10.0
 
-# Utility Libraries
-click>=8.1.3
-rich>=13.3.1
-tenacity>=8.2.2
+# Exclude problematic providers that have paramiko DSSKey issues
+# These will be handled by our custom operators instead
+
+# Performance and utilities
+tenacity>=8.0.0
+rich>=13.0.0  # For better CLI output
+
+# Data validation libraries
+marshmallow>=3.19.0
+pydantic>=1.10.0
+
+# File format support  
+openpyxl>=3.1.0  # Excel support
+xlrd>=2.0.0      # Excel reading
+
+# Encryption and security
+cryptography>=39.0.0
+
+# Async support
+aiohttp>=3.8.0
+asyncio-mqtt>=0.13.0
+
+# Time zone support
+pytz>=2022.7
+
+# JSON and configuration
+configparser>=5.3.0
+toml>=0.10.2
+
+# Logging and monitoring
+structlog>=22.3.0
+
+# Optional: Machine learning (commented out to reduce image size)
+# scikit-learn>=1.2.0
+# tensorflow>=2.11.0
+
+# Optional: Advanced data processing (commented out to reduce image size)
+# dask>=2023.1.0
+# apache-beam>=2.44.0
+
+# Pin working versions to avoid compatibility issues
+sqlalchemy>=1.4.0,<2.0.0  # Airflow 3.x compatibility
+alembic>=1.9.0
+
+# Fix for Azure batch warnings
+azure-core>=1.26.0
+
+# Alternative HTTP client
+urllib3>=1.26.0,<2.0.0
+
+# Alternative to SSH providers - we'll implement our own
+# that handles paramiko version compatibility

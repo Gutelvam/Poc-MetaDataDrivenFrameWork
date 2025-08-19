@@ -1,0 +1,49 @@
+dag_id: test_framework_dag
+description: "Test DAG to verify framework is working"
+pipeline_type: batch
+schedule_interval: null
+start_date: "2024-01-01"
+catchup: false
+owner: framework-team
+tags:
+  - test
+  - framework
+  - verification
+
+tasks:
+  - task_id: start_test
+    operator_type: dummy
+    description: "Start of test pipeline"
+  
+  - task_id: extract_test
+    operator_type: extract
+    description: "Test data extraction"
+    depends_on: [start_test]
+    source:
+      name: test_source
+      type: postgresql
+      connection_id: postgres_dev
+  
+  - task_id: transform_test
+    operator_type: transform
+    description: "Test data transformation"
+    depends_on: [extract_test]
+  
+  - task_id: quality_check_test
+    operator_type: quality_check
+    description: "Test quality checks"
+    depends_on: [transform_test]
+  
+  - task_id: load_test
+    operator_type: load
+    description: "Test data loading"
+    depends_on: [quality_check_test]
+    sink:
+      name: test_sink
+      type: postgresql
+      connection_id: postgres_dev
+  
+  - task_id: end_test
+    operator_type: dummy
+    description: "End of test pipeline"
+    depends_on: [load_test]

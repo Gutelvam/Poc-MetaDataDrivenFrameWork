@@ -11,7 +11,7 @@ from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
-import clickhouse_connect
+from sqlalchemy import create_engine, MetaData, Table, Column, String, Integer, DateTime, Boolean, inspect
 from pymongo import MongoClient
 from azure.storage.blob import BlobServiceClient
 import paramiko
@@ -334,109 +334,100 @@ class MongoDBSinkOperator(BaseSinkOperator):
             client.close()
 
 class ClickHouseSinkOperator(BaseSinkOperator):
-    """Load data into ClickHouse"""
+    """Load data into ClickHouse using clickhouse-sqlalchemy"""
     
     def create_table_if_not_exists(self, data: Union[List[Dict], pd.DataFrame]):
         """Create ClickHouse table if it doesn't exist"""
         if not data:
             return
         
+        if isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = data
+            
         connection = BaseHook.get_connection(self.sink_config.connection_id)
         
-        client = clickhouse_connect.get_client(
-            host=connection.host,
-            port=connection.port or 8123,
-            username=connection.login,
-            password=connection.password,
-            database=connection.schema or 'default'
-        )
+        # Build SQLAlchemy connection string
+        conn_string = f"clickhouse+native://{connection.login}:{connection.password}@{connection.host}:{connection.port or 9000}/{connection.schema or 'default'}"
+        engine = create_engine(conn_string)
         
         try:
-            # Check if table exists
-            result = client.query(f"EXISTS TABLE {self.sink_config.table_name}")
-            table_exists = result.result_rows[0][0] if result.result_rows else False
+            inspector = inspect(engine)
+            table_exists = inspector.has_table(self.sink_config.table_name, schema=self.sink_config.schema_name)
             
             if not table_exists:
+                # Infer schema from DataFrame if not provided
                 if self.sink_config.table_schema:
-                    columns_def = self._build_clickhouse_columns(self.sink_config.table_schema)
+                    columns_def = self.sink_config.table_schema
                 else:
-                    columns_def = self._infer_clickhouse_schema(data)
+                    columns_def = self._infer_sqlalchemy_schema(df)
+                    
+                # Create a SQLAlchemy Table object
+                metadata = MetaData()
+                table = Table(self.sink_config.table_name, metadata, *columns_def, schema=self.sink_config.schema_name)
                 
-                create_table_sql = f"""
-                    CREATE TABLE {self.sink_config.table_name} (
-                        {columns_def}
-                    ) ENGINE = MergeTree()
-                    ORDER BY tuple()
-                """
-                
-                client.query(create_table_sql)
+                # Execute create table
+                metadata.create_all(engine)
                 logger.info(f"Created ClickHouse table: {self.sink_config.table_name}")
-        
         finally:
-            client.close()
+            engine.dispose()
     
     def load_data(self, data: Union[List[Dict], pd.DataFrame], context) -> int:
         """Load data into ClickHouse"""
-        if isinstance(data, pd.DataFrame):
-            data = data.to_dict('records')
+        if isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = data
         
-        if not data:
+        if df.empty:
             return 0
-        
+            
         connection = BaseHook.get_connection(self.sink_config.connection_id)
         
-        client = clickhouse_connect.get_client(
-            host=connection.host,
-            port=connection.port or 8123,
-            username=connection.login,
-            password=connection.password,
-            database=connection.schema or 'default'
-        )
+        conn_string = f"clickhouse+native://{connection.login}:{connection.password}@{connection.host}:{connection.port or 9000}/{connection.schema or 'default'}"
+        engine = create_engine(conn_string)
         
         try:
             if self.sink_config.write_mode == WriteMode.OVERWRITE:
-                # Truncate table
-                client.query(f"TRUNCATE TABLE {self.sink_config.table_name}")
+                df.to_sql(
+                    self.sink_config.table_name, 
+                    con=engine, 
+                    if_exists='replace', 
+                    index=False,
+                    schema=self.sink_config.schema_name
+                )
+            elif self.sink_config.write_mode == WriteMode.APPEND:
+                df.to_sql(
+                    self.sink_config.table_name, 
+                    con=engine, 
+                    if_exists='append', 
+                    index=False,
+                    schema=self.sink_config.schema_name
+                )
+            else:
+                raise ValueError(f"Unsupported write mode: {self.sink_config.write_mode}")
             
-            # Insert data
-            client.insert(self.sink_config.table_name, data)
-            return len(data)
+            return len(df)
         
         finally:
-            client.close()
+            engine.dispose()
     
-    def _infer_clickhouse_schema(self, data: Union[List[Dict], pd.DataFrame]) -> str:
-        """Infer ClickHouse schema from data"""
-        if isinstance(data, pd.DataFrame):
-            sample = data.head(1).to_dict('records')[0]
-        else:
-            sample = data[0] if data else {}
-        
+    def _infer_sqlalchemy_schema(self, df: pd.DataFrame) -> List[Column]:
+        """Infer SQLAlchemy schema from a DataFrame"""
         columns = []
-        for col_name, value in sample.items():
-            if isinstance(value, bool):
-                col_type = "UInt8"
-            elif isinstance(value, int):
-                col_type = "Int64"
-            elif isinstance(value, float):
-                col_type = "Float64"
-            elif isinstance(value, datetime):
-                col_type = "DateTime"
-            elif isinstance(value, str):
-                col_type = "String"
+        for col_name, col_type in zip(df.columns, df.dtypes):
+            if pd.api.types.is_bool_dtype(col_type):
+                columns.append(Column(col_name, Boolean))
+            elif pd.api.types.is_integer_dtype(col_type):
+                columns.append(Column(col_name, Integer))
+            elif pd.api.types.is_float_dtype(col_type):
+                columns.append(Column(col_name, Float64))
+            elif pd.api.types.is_datetime64_any_dtype(col_type):
+                columns.append(Column(col_name, DateTime))
             else:
-                col_type = "String"
-            
-            columns.append(f"{col_name} {col_type}")
-        
-        return ', '.join(columns)
-    
-    def _build_clickhouse_columns(self, schema: Dict[str, str]) -> str:
-        """Build ClickHouse columns definition"""
-        columns = []
-        for col_name, col_type in schema.items():
-            columns.append(f"{col_name} {col_type}")
-        return ', '.join(columns)
+                columns.append(Column(col_name, String))
+        return columns
 
 class DataLakeGen2SinkOperator(BaseSinkOperator):
     """Load data into Azure Data Lake Gen2"""
@@ -590,7 +581,7 @@ class SFTPSinkOperator(BaseSinkOperator):
                 remote_file.write(file_buffer.getvalue())
             
             return len(df)
-                
+            
         except Exception as e:
             logger.error(f"SFTP upload failed: {str(e)}")
             raise

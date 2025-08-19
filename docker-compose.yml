@@ -1,40 +1,81 @@
-# docker-compose.yml - VERSÃO CORRIGIDA PARA AIRFLOW 3.0.x
+# docker-compose.yml - CORRECTED VERSION for Airflow 3.0.4
+# Based on official Apache Airflow 3.0.4 configuration with your customizations
 
-# Define o bloco de dependências comuns para ser reutilizado
-x-airflow-deps: &airflow-common-deps
-  postgres:
-    condition: service_healthy
+# Environment variables configuration
+# Create a .env file with these variables or set them in your environment:
+# AIRFLOW_IMAGE_NAME=apache/airflow:3.0.4
+# AIRFLOW_UID=50000
+# AIRFLOW_PROJ_DIR=.
+# _AIRFLOW_WWW_USER_USERNAME=admin
+# _AIRFLOW_WWW_USER_PASSWORD=admin
 
 x-airflow-common:
   &airflow-common
+  # Use official image unless you have a custom Dockerfile
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.0.4}
+  # Uncomment below if you have a custom Dockerfile
   build:
     context: .
     dockerfile: Dockerfile
   
-  environment: &airflow-common-env
+  environment:
+    &airflow-common-env
+    # FIXED: Use LocalExecutor as you intended (no Redis/Celery needed)
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    
+    # REMOVED: Celery configurations (not needed with LocalExecutor)
+    # AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    # AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    
+    AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     
-    # FIXED: Moved secret_key from [webserver] to [api] section for Airflow 3.x
-    AIRFLOW__API__SECRET_KEY: 'framework_secret_key_change_in_production'
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    # FIXED: Execution API server URL for Airflow 3.0.4
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
     
-    # Updated authentication settings for Airflow 3.x
+    # Scheduler health check
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    
+    # FIXED: API configuration for Airflow 3.0.4
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__API__SECRET_KEY: 'framework_secret_key_change_in_production_123456789'
+    AIRFLOW__API__ENABLE_EXPERIMENTAL_API: 'false'
+    
+    # FIXED: Internal API configuration (critical for Airflow 3.0.4)
+    AIRFLOW__CORE__INTERNAL_API_URL: 'http://airflow-apiserver:8080'
+    
+    # Webserver configuration
     AIRFLOW__WEBSERVER__AUTHENTICATE: 'true'
     AIRFLOW__WEBSERVER__AUTH_BACKEND: 'airflow.auth.backends.password_auth'
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
     AIRFLOW__WEBSERVER__RBAC: 'true'
+    AIRFLOW__WEBSERVER__SESSION_BACKEND: 'database'
+    AIRFLOW__WEBSERVER__COOKIE_SECURE: 'false'
+    AIRFLOW__WEBSERVER__COOKIE_SAMESITE: 'Lax'
     
-    # FIXED: Updated DAG discovery settings for Airflow 3.x
+    # Task execution configuration
+    AIRFLOW__CORE__ENABLE_TASK_CONTEXT_LOGGER: 'true'
+    AIRFLOW__LOGGING__ENABLE_TASK_CONTEXT_LOGGER: 'true'
+    
+    # DAG processing configuration
     AIRFLOW__CORE__DAG_DISCOVERY_SAFE_MODE: 'false'
     AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '300'
-    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: '30'  # ← MOVED from scheduler section
+    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: '30'
     AIRFLOW__SCHEDULER__PARSING_PROCESSES: '2'
-  
+    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: '10'
     
-    # Framework specific
+    # Provider configuration
+    AIRFLOW__CORE__LAZY_LOAD_PROVIDERS: 'true'
+    AIRFLOW__CORE__LAZY_DISCOVER_PROVIDERS: 'true'
+    
+    # Custom configuration
+    AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    
+    # Framework specific (your additions)
     FRAMEWORK_METADATA_PATH: /opt/airflow/metadata
     PYTHONPATH: /opt/airflow/dags:/opt/airflow
     COMPOSE_CONVERT_WINDOWS_PATHS: 1
@@ -43,12 +84,17 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
-    - ${AIRFLOW_PROJ_DIR:-.}/metadata:/opt/airflow/metadata
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/metadata:/opt/airflow/metadata  # Your addition
+  
   user: "${AIRFLOW_UID:-50000}:0"
-  depends_on: *airflow-common-deps
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
 
 services:
+  # PostgreSQL - Airflow main database
   postgres:
     image: postgres:13
     environment:
@@ -66,6 +112,7 @@ services:
     ports:
       - "5432:5432"
 
+  # PostgreSQL - Development database (your addition)
   postgres-dev:
     image: postgres:13
     environment:
@@ -78,22 +125,23 @@ services:
       - "5433:5432"
     restart: always
 
-  redis:
-    image: redis:7-alpine
-    expose:
-      - 6379
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 30s
-      retries: 50
-      start_period: 30s
-    restart: always
+  # REMOVED: Redis (not needed with LocalExecutor)
+  # redis:
+  #   image: redis:7.2-bookworm
+  #   expose:
+  #     - 6379
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 30s
+  #     retries: 50
+  #     start_period: 30s
+  #   restart: always
 
-  # CORRIGIDO: webserver com comando e health check corretos para Airflow 3.x
-  airflow-webserver:
+  # API Server (webserver) - FIXED for Airflow 3.0.4
+  airflow-apiserver:
     <<: *airflow-common
-    command: api-server  
+    command: api-server
     ports:
       - "8080:8080"
     healthcheck:
@@ -104,27 +152,43 @@ services:
       start_period: 30s
     restart: always
     depends_on:
-      <<: *airflow-common-deps
+      <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
 
-  # AIRFLOW 3.x SCHEDULER com configurações otimizadas
+  # Scheduler - FIXED for Airflow 3.0.4
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
     healthcheck:
-      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
     restart: always
     depends_on:
-      <<: *airflow-common-deps
+      <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
 
-  # AIRFLOW 3.x TRIGGERER
+  # DAG Processor - REQUIRED for Airflow 3.0.4 (was missing in your version)
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Triggerer - FIXED for Airflow 3.0.4
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
@@ -136,65 +200,136 @@ services:
       start_period: 30s
     restart: always
     depends_on:
-      <<: *airflow-common-deps
+      <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
 
-  # Inicialização corrigida para Airflow 3.x
+  # REMOVED: Worker (not needed with LocalExecutor)
+  # airflow-worker:
+  #   <<: *airflow-common
+  #   command: celery worker
+  #   [... worker configuration ...]
+
+  # Initialization - FIXED for Airflow 3.0.4
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
     command:
       - -c
       - |
-        echo "🚀 Inicializando Framework com Airflow 3.0.x..."
-        echo "=============================================="
+        echo "🚀 Inicializando Airflow 3.0.4..."
+        echo "=================================="
         
-        echo "⏳ Aguardando PostgreSQL..."
-        while ! pg_isready -h postgres -U airflow -d airflow; do
-          echo "   Aguardando conexão com o banco..."
-          sleep 2
-        done
-        echo "✅ PostgreSQL pronto"
-        
-        echo "🗄️  Inicializando banco de dados do Airflow..."
-        airflow db migrate
-        
-        if [ $? -eq 0 ]; then
-            echo "✅ Banco de dados inicializado com sucesso"
-        else
-            echo "❌ Falha na inicialização do banco"
-            exit 1
+        # Check system resources (from official config)
+        if [[ -z "${AIRFLOW_UID}" ]]; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
+          echo "If you are on Linux, you SHOULD follow the instructions below to set "
+          echo "AIRFLOW_UID environment variable, otherwise files will be owned by root."
+          echo "For other operating systems you can get rid of the warning with manually created .env file:"
+          echo "    See: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#setting-the-right-airflow-user"
+          echo
+          export AIRFLOW_UID=$$(id -u)
         fi
         
-        echo "👤 Criando usuário admin..."
-        # Comando corrigido para Airflow 3.x
-        airflow users create\
-          --username admin \
-          --firstname Framework \
-          --lastname Admin \
-          --role Admin \
-          --email admin@framework.com \
-          --password admin || echo "⚠️ Usuário já existe ou erro na criação"
+        one_meg=1048576
+        mem_available=$$(($$(getconf _PHYS_PAGES) * $$(getconf PAGE_SIZE) / one_meg))
+        cpus_available=$$(grep -cE 'cpu[0-9]+' /proc/stat)
+        disk_available=$$(df / | tail -1 | awk '{print $$4}')
+        warning_resources="false"
         
-        echo "📁 Criando estrutura de diretórios..."
-        mkdir -p /sources/logs /sources/dags /sources/plugins /sources/metadata /sources/config
-        chown -R "${AIRFLOW_UID:-50000}:0" /sources/{logs,dags,plugins,metadata,config}
+        if (( mem_available < 4000 )) ; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough memory available for Docker.\e[0m"
+          echo "At least 4GB of memory required. You have $$(numfmt --to iec $$((mem_available * one_meg)))"
+          echo
+          warning_resources="true"
+        fi
+        
+        if (( cpus_available < 2 )); then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough CPUS available for Docker.\e[0m"
+          echo "At least 2 CPUs recommended. You have $${cpus_available}"
+          echo
+          warning_resources="true"
+        fi
+        
+        if (( disk_available < one_meg * 10 )); then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough Disk space available for Docker.\e[0m"
+          echo "At least 10 GBs recommended. You have $$(numfmt --to iec $$((disk_available * 1024 )))"
+          echo
+          warning_resources="true"
+        fi
+        
+        if [[ $${warning_resources} == "true" ]]; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: You have not enough resources to run Airflow (see above)!\e[0m"
+          echo "Please follow the instructions to increase amount of resources available:"
+          echo "   https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#before-you-begin"
+          echo
+        fi
+        
+        echo "Creating missing opt dirs if missing:"
+        mkdir -v -p /opt/airflow/{logs,dags,plugins,config,metadata}
+        
+        echo "Airflow version:"
+        /entrypoint airflow version
+        
+        echo "Files in shared volumes:"
+        ls -la /opt/airflow/{logs,dags,plugins,config,metadata}
+        
+        echo "Running airflow config list to create default config file if missing."
+        /entrypoint airflow config list >/dev/null
+        
+        echo "Change ownership of files in /opt/airflow to ${AIRFLOW_UID}:0"
+        chown -R "${AIRFLOW_UID}:0" /opt/airflow/
+        
+        echo "Change ownership of files in shared volumes to ${AIRFLOW_UID}:0"
+        chown -v -R "${AIRFLOW_UID}:0" /opt/airflow/{logs,dags,plugins,config,metadata}
+        
+        echo "Files in shared volumes:"
+        ls -la /opt/airflow/{logs,dags,plugins,config,metadata}
         
         echo ""
         echo "🎉 Inicialização concluída com sucesso!"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "🌐 Acesse: http://localhost:8080"
-        echo "👤 Login: admin / admin"
-        echo "📖 Airflow 3.0.x - Webserver + Scheduler + Triggerer"
-        echo "⚡ Sua arquitetura original mantida!"
+        echo "👤 Login: ${_AIRFLOW_WWW_USER_USERNAME:-airflow} / ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}"
+        echo "📖 Airflow 3.0.4 - LocalExecutor"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
     environment:
       <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-admin}
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
-    volumes:
-      - ${AIRFLOW_PROJ_DIR:-.}:/sources
 
+  # CLI - For debugging (optional)
+  airflow-cli:
+    <<: *airflow-common
+    profiles:
+      - debug
+    environment:
+      <<: *airflow-common-env
+      CONNECTION_CHECK_MAX_COUNT: "0"
+    command:
+      - bash
+      - -c
+      - airflow
+    depends_on:
+      <<: *airflow-common-depends-on
+
+  # REMOVED: Flower (only needed with CeleryExecutor)
+  # flower:
+  #   <<: *airflow-common
+  #   command: celery flower
+  #   [... flower configuration ...]
+
+  # Your additional services (monitoring)
   prometheus:
     image: prom/prometheus:latest
     ports:
@@ -218,7 +353,7 @@ services:
       - grafana-data:/var/lib/grafana
     restart: unless-stopped
 
-  # Serviços opcionais comentados
+  # Optional services (uncomment as needed)
   # mongodb:
   #   image: mongo:7.0
   #   ports:

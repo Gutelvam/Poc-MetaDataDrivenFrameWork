@@ -11,12 +11,11 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Union
 import boto3
 from azure.storage.blob import BlobServiceClient
-import clickhouse_connect
+from sqlalchemy import create_engine
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import paramiko
 from pymongo import MongoClient
-from sqlalchemy import create_engine
 
 from airflow.models import BaseOperator
 from airflow.hooks.base import BaseHook
@@ -126,18 +125,15 @@ class MongoDBSourceOperator(BaseSourceOperator):
             client.close()
 
 class ClickHouseSourceOperator(BaseSourceOperator):
-    """Extract data from ClickHouse"""
+    """Extract data from ClickHouse using clickhouse-sqlalchemy"""
     
     def extract_data(self, context) -> List[Dict]:
         connection = BaseHook.get_connection(self.source_config.connection_id)
         
-        client = clickhouse_connect.get_client(
-            host=connection.host,
-            port=connection.port or 8123,
-            username=connection.login,
-            password=connection.password,
-            database=connection.schema or 'default'
-        )
+        # Build the SQLAlchemy connection string for ClickHouse
+        # The syntax is 'clickhouse://user:password@host:port/database'
+        conn_string = f"clickhouse://{connection.login}:{connection.password}@{connection.host}:{connection.port}/{connection.schema or 'default'}"
+        engine = create_engine(conn_string)
         
         try:
             # Build query
@@ -148,18 +144,15 @@ class ClickHouseSourceOperator(BaseSourceOperator):
             else:
                 raise ValueError("Either query or table_name must be provided")
             
-            # Execute query
-            result = client.query(query)
+            # Execute query and read into a pandas DataFrame
+            with engine.connect() as conn:
+                df = pd.read_sql_query(query, conn)
             
-            if result.result_rows:
-                # Convert to pandas DataFrame then to records
-                df = pd.DataFrame(result.result_rows, columns=result.column_names)
-                return df.to_dict('records')
-            
-            return []
+            return df.to_dict('records')
             
         finally:
-            client.close()
+            # The engine and its connections are managed by SQLAlchemy
+            pass
 
 class PgVectorSourceOperator(BaseSourceOperator):
     """Extract data from PostgreSQL with pgvector support"""

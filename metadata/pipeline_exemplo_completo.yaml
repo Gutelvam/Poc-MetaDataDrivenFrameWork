@@ -315,3 +315,4 @@ retry_delay: 600  # 10 minutos
 # Configurações de reprocessamento
 allow_reprocessing: true
 reprocess_lookback_days: 7
+

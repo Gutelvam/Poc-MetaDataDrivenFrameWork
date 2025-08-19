@@ -1,7 +1,7 @@
 # dags/main.py
 """
 Fixed Main DAG Entry Point - Airflow 3.x Compatible
-Versão corrigida com melhor tratamento de erros e debug
+This version ensures DAGs are properly exported to globals
 """
 
 import sys
@@ -9,314 +9,255 @@ import os
 import logging
 from pathlib import Path
 from datetime import datetime
-import traceback
 
-# Setup logging mais robusto
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Função para verificar ambiente
-def check_environment():
-    """Verifica o ambiente de forma robusta"""
-    logger.info("=== FRAMEWORK ENVIRONMENT CHECK ===")
+# def create_test_dag():
+#     """Create a guaranteed working test DAG"""
+#     from airflow import DAG
+#     from airflow.operators.empty import EmptyOperator
+#     from airflow.operators.python import PythonOperator
     
-    # Verificar diretórios importantes
-    framework_path = Path(__file__).parent
-    metadata_path = Path("/opt/airflow/metadata")
-    
-    logger.info(f"Framework path: {framework_path}")
-    logger.info(f"Framework path exists: {framework_path.exists()}")
-    logger.info(f"Metadata path: {metadata_path}")
-    logger.info(f"Metadata path exists: {metadata_path.exists()}")
-    
-    # Listar arquivos YAML
-    if metadata_path.exists():
-        yaml_files = list(metadata_path.glob("*.yaml")) + list(metadata_path.glob("*.yml"))
-        logger.info(f"YAML files found: {[f.name for f in yaml_files]}")
+#     def framework_status(**context):
+#         logger.info("🎉 Framework main.py is working!")
+#         framework_path = Path("/opt/airflow/dags")
+#         metadata_path = Path("/opt/airflow/metadata")
         
-        # Verificar se pelo menos um arquivo existe
-        if not yaml_files:
-            logger.warning("No YAML files found in metadata directory!")
-            return False
-    else:
-        logger.error(f"Metadata directory does not exist: {metadata_path}")
-        return False
-    
-    # Verificar módulos do framework
-    required_modules = ['core', 'metadata', 'factory']
-    for module in required_modules:
-        module_path = framework_path / module
-        if not module_path.exists():
-            logger.error(f"Required module directory missing: {module_path}")
-            return False
+#         status = {
+#             "framework_path_exists": framework_path.exists(),
+#             "metadata_path_exists": metadata_path.exists(),
+#             "python_path": sys.path[:3],   # First 3 entries
+#             "current_file": __file__,
+#         }
         
-        # Verificar se tem __init__.py
-        init_file = module_path / "__init__.py"
-        if not init_file.exists():
-            logger.warning(f"__init__.py missing in {module_path}")
+#         if metadata_path.exists():
+#             yaml_files = list(metadata_path.glob("*.yaml")) + list(metadata_path.glob("*.yml"))
+#             status["yaml_files_found"] = [f.name for f in yaml_files]
+        
+#         logger.info(f"Framework Status: {status}")
+#         return status
     
-    return True
+#     dag = DAG(
+#         'framework_main_test',
+#         default_args={
+#             'owner': 'framework-main',
+#             'start_date': datetime(2024, 1, 1),
+#             'retries': 0,
+#         },
+#         description='Test DAG created by main.py to verify framework',
+#         schedule=None,
+#         catchup=False,
+#         tags=['main', 'framework', 'test']
+#     )
+    
+#     start = EmptyOperator(task_id='start', dag=dag)
+#     status = PythonOperator(
+#         task_id='check_framework_status',
+#         python_callable=framework_status,
+#         dag=dag
+#     )
+#     end = EmptyOperator(task_id='end', dag=dag)
+    
+#     start >> status >> end
+#     return dag
 
-# Função para criar DAG de fallback
-def create_fallback_dag(dag_id, description, error_message):
-    """Cria DAG de fallback em caso de erro"""
-    from airflow import DAG
-    from airflow.operators.empty import EmptyOperator
-    from airflow.operators.python import PythonOperator
+def create_metadata_dags():
+    """Try to create DAGs from metadata files"""
+    created_dags = {}
     
-    def show_error(**context):
-        logger.error(f"Framework error in {dag_id}: {error_message}")
-        raise Exception(f"Framework error: {error_message}")
-    
-    dag = DAG(
-        dag_id,
-        default_args={
-            'owner': 'framework',
-            'depends_on_past': False,
-            'start_date': datetime(2024, 1, 1),
-            'retries': 0,
-        },
-        description=description,
-        schedule=None,
-        catchup=False,
-        tags=['error', 'framework']
-    )
-    
-    start = EmptyOperator(task_id='start', dag=dag)
-    error_task = PythonOperator(
-        task_id='show_error',
-        python_callable=show_error,
-        dag=dag
-    )
-    
-    start >> error_task
-    return dag
-
-# Adicionar path do framework
-framework_path = Path(__file__).parent
-sys.path.insert(0, str(framework_path))
-
-# Verificar ambiente primeiro
-if not check_environment():
-    logger.error("Environment check failed - creating minimal DAGs")
-    
-    # Criar DAGs mínimos para mostrar problemas
-    error_dag = create_fallback_dag(
-        'framework_environment_error',
-        'Environment check failed',
-        'Metadata directory or required modules missing'
-    )
-    globals()['framework_environment_error'] = error_dag
-    
-    # Criar DAG de teste simples
-    from airflow import DAG
-    from airflow.operators.empty import EmptyOperator
-    
-    test_dag = DAG(
-        'framework_test_simple',
-        default_args={
-            'owner': 'framework',
-            'start_date': datetime(2024, 1, 1),
-            'retries': 0,
-        },
-        description='Simple test DAG - Framework has issues',
-        schedule=None,
-        catchup=False,
-        tags=['test', 'framework']
-    )
-    
-    test_task = EmptyOperator(task_id='test_task', dag=test_dag)
-    globals()['framework_test_simple'] = test_dag
-    
-else:
-    # Ambiente OK, tentar carregar framework
     try:
-        logger.info("✅ Environment check passed - loading framework...")
+        # Add framework path to Python path
+        framework_path = Path(__file__).parent
+        if str(framework_path) not in sys.path:
+            sys.path.insert(0, str(framework_path))
         
-        # Import gradual com tratamento de erro
-        try:
-            from core.config import PipelineConfig, TaskConfig, OperatorType
-            logger.info("✅ Core config imports successful")
-        except Exception as e:
-            logger.error(f"❌ Core config import failed: {e}")
-            raise ImportError(f"Core config import failed: {e}")
+        # Check metadata directory
+        metadata_path = Path("/opt/airflow/metadata")
+        if not metadata_path.exists():
+            logger.warning(f"Metadata directory not found: {metadata_path}")
+            return created_dags
         
+        # Find YAML files
+        yaml_files = list(metadata_path.glob("*.yaml")) + list(metadata_path.glob("*.yml"))
+        logger.info(f"Found {len(yaml_files)} YAML files: {[f.name for f in yaml_files]}")
+        
+        if not yaml_files:
+            logger.info("No YAML configuration files found - skipping metadata DAG creation")
+            return created_dags
+        
+        # Try to import framework modules
         try:
+            from dag_factory import DAGFactory, SimplifiedDAGFactory
             from metadata.manager import MetadataManager
-            logger.info("✅ Metadata manager import successful")
-        except Exception as e:
-            logger.error(f"❌ Metadata manager import failed: {e}")
-            raise ImportError(f"Metadata manager import failed: {e}")
+            logger.info("✅ Successfully imported framework modules")
+        except ImportError as e:
+            logger.error(f"❌ Failed to import framework modules: {e}")
+            logger.info("Creating error DAG to show import issues")
+            error_dag = create_import_error_dag(str(e))
+            created_dags[error_dag.dag_id] = error_dag
+            return created_dags
         
+        # Create DAGs using the factory
         try:
-            from dag_factory import DAGFactory
-            logger.info("✅ DAG factory import successful")
-        except Exception as e:
-            logger.error(f"❌ DAG factory import failed: {e}")
-            # Tentar import alternativo
-            try:
-                from factory.dag_generator import DynamicDAGGenerator
-                logger.info("✅ Dynamic DAG generator import successful")
-            except Exception as e2:
-                logger.error(f"❌ Both DAG imports failed: {e}, {e2}")
-                raise ImportError(f"DAG factory imports failed: {e}")
-        
-        # Tentar importar monitoring (opcional)
-        try:
-            from monitoring.metrics import get_monitoring_callbacks
-            logger.info("✅ Monitoring imports successful")
-        except Exception as e:
-            logger.warning(f"⚠️ Monitoring import failed: {e}")
-            def get_monitoring_callbacks():
-                return {}
-        
-        # Método 1: Tentar usar DAGFactory diretamente
-        logger.info("Attempting to create DAGs using DAGFactory...")
-        generated_dags = {}
-        
-        try:
-            metadata_manager = MetadataManager("/opt/airflow/metadata")
-            dag_factory = DAGFactory(metadata_manager)
+            factory = SimplifiedDAGFactory()   # Use simplified version
             
-            # Listar arquivos de configuração
-            config_files = metadata_manager.list_pipeline_configs()
-            logger.info(f"Found {len(config_files)} configuration files: {config_files}")
-            
-            if not config_files:
-                logger.warning("No configuration files found!")
-                # Criar DAG de aviso
-                warning_dag = create_fallback_dag(
-                    'no_configs_found',
-                    'No configuration files found',
-                    'No YAML files found in /opt/airflow/metadata'
-                )
-                generated_dags['no_configs_found'] = warning_dag
-            else:
-                # Processar cada arquivo
-                for config_file in config_files:
-                    try:
-                        full_path = Path("/opt/airflow/metadata") / config_file
-                        logger.info(f"Processing config file: {full_path}")
-                        
-                        if full_path.exists():
-                            dag = dag_factory.create_dag(str(full_path))
-                            generated_dags[dag.dag_id] = dag
-                            logger.info(f"✅ Successfully created DAG: {dag.dag_id}")
-                        else:
-                            logger.error(f"Config file does not exist: {full_path}")
-                            
-                    except Exception as e:
-                        logger.error(f"Failed to create DAG from {config_file}: {str(e)}")
-                        logger.error(f"Error details: {traceback.format_exc()}")
-                        
-                        # Criar DAG de erro para mostrar o problema
-                        error_dag = create_fallback_dag(
-                            f"error_{Path(config_file).stem}",
-                            f'Error processing {config_file}',
-                            str(e)
-                        )
-                        generated_dags[error_dag.dag_id] = error_dag
-            
+            for yaml_file in yaml_files:
+                try:
+                    logger.info(f"Processing {yaml_file.name}...")
+                    dag = factory.create_dag(str(yaml_file))
+                    created_dags[dag.dag_id] = dag
+                    logger.info(f"✅ Created DAG: {dag.dag_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to create DAG from {yaml_file.name}: {e}")
+                    # Create error DAG to show the specific issue
+                    error_dag = create_config_error_dag(yaml_file.stem, str(e))
+                    created_dags[error_dag.dag_id] = error_dag
+        
         except Exception as e:
-            logger.error(f"Failed to initialize DAG factory: {str(e)}")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-            
-            # Método 2: Tentar usar DynamicDAGGenerator
-            try:
-                from factory.dag_generator import DynamicDAGGenerator
-                logger.info("Trying DynamicDAGGenerator as fallback...")
-                
-                generator = DynamicDAGGenerator("/opt/airflow/metadata")
-                generated_dags = generator.generate_dags()
-                logger.info(f"DynamicDAGGenerator created {len(generated_dags)} DAGs")
-                
-            except Exception as e2:
-                logger.error(f"DynamicDAGGenerator also failed: {str(e2)}")
-                
-                # Último recurso: criar DAG de erro
-                error_dag = create_fallback_dag(
-                    'framework_initialization_error',
-                    'Framework initialization failed',
-                    f"Both DAGFactory and DynamicDAGGenerator failed: {str(e)}"
-                )
-                generated_dags = {'framework_initialization_error': error_dag}
-        
-        # Adicionar callbacks de monitoramento
-        try:
-            monitoring_callbacks = get_monitoring_callbacks()
-            for dag_id, dag in generated_dags.items():
-                if monitoring_callbacks and hasattr(dag, 'default_args'):
-                    dag.default_args.update(monitoring_callbacks)
-                    logger.info(f"Added monitoring callbacks to DAG: {dag_id}")
-        except Exception as e:
-            logger.warning(f"Failed to add monitoring callbacks: {e}")
-        
-        # Disponibilizar DAGs para o Airflow
-        globals().update(generated_dags)
-        
-        logger.info(f"🎉 Successfully loaded {len(generated_dags)} DAGs: {list(generated_dags.keys())}")
-        
-        # Criar função de debug
-        def get_framework_status():
-            """Retorna status do framework para debug"""
-            return {
-                'total_dags': len(generated_dags),
-                'dag_ids': list(generated_dags.keys()),
-                'framework_version': '1.0.0',
-                'metadata_path': '/opt/airflow/metadata',
-                'framework_path': str(framework_path),
-                'python_path': sys.path,
-            }
-        
-        # Exportar para debug
-        __all__ = ['get_framework_status'] + list(generated_dags.keys())
-        
+            logger.error(f"❌ DAG factory creation failed: {e}")
+            error_dag = create_factory_error_dag(str(e))
+            created_dags[error_dag.dag_id] = error_dag
+    
     except Exception as e:
-        logger.error(f"❌ Framework initialization failed: {str(e)}")
-        logger.error(f"Full traceback:\n{traceback.format_exc()}")
-        
-        # Criar DAG de erro detalhado
-        from airflow import DAG
-        from airflow.operators.python import PythonOperator
-        
-        def show_detailed_error(**context):
-            error_info = {
-                'error_message': str(e),
-                'error_type': type(e).__name__,
-                'traceback': traceback.format_exc(),
-                'python_path': sys.path,
-                'framework_path': str(framework_path),
-                'metadata_exists': Path("/opt/airflow/metadata").exists(),
-                'working_directory': os.getcwd(),
-            }
-            logger.error(f"Detailed error info: {error_info}")
-            raise Exception(f"Framework failed: {error_info}")
-        
-        error_dag = DAG(
-            'framework_detailed_error',
-            default_args={
-                'owner': 'framework',
-                'start_date': datetime(2024, 1, 1),
-                'retries': 0,
-            },
-            description=f'Framework detailed error: {str(e)[:100]}',
-            schedule=None,
-            catchup=False,
-            tags=['error', 'framework', 'detailed']
-        )
-        
-        error_task = PythonOperator(
-            task_id='show_detailed_error',
-            python_callable=show_detailed_error,
-            dag=error_dag
-        )
-        
-        globals()['framework_detailed_error'] = error_dag
-        
-        logger.info("Created error DAG for debugging")
+        logger.error(f"❌ Metadata processing completely failed: {e}")
+        error_dag = create_general_error_dag(str(e))
+        created_dags[error_dag.dag_id] = error_dag
+    
+    return created_dags
 
-# Log final
-logger.info("=== FRAMEWORK MAIN.PY LOADING COMPLETED ===")
+# def create_import_error_dag(error_message):
+#     """Create DAG to show import errors"""
+#     from airflow import DAG
+#     from airflow.operators.python import PythonOperator
+    
+#     def show_import_error(**context):
+#         logger.error(f"Import Error: {error_message}")
+#         raise Exception(f"Framework module import failed: {error_message}")
+    
+#     dag = DAG(
+#         'framework_import_error',
+#         default_args={'owner': 'framework', 'start_date': datetime(2024, 1, 1), 'retries': 0},
+#         description=f'Import Error: {error_message[:50]}...',
+#         schedule=None,
+#         catchup=False,
+#         tags=['error', 'import', 'framework']
+#     )
+    
+#     PythonOperator(task_id='show_error', python_callable=show_import_error, dag=dag)
+#     return dag
+
+# def create_config_error_dag(config_name, error_message):
+#     """Create DAG to show configuration errors"""
+#     from airflow import DAG
+#     from airflow.operators.python import PythonOperator
+    
+#     def show_config_error(**context):
+#         logger.error(f"Configuration Error in {config_name}: {error_message}")
+#         raise Exception(f"Config error: {error_message}")
+    
+#     dag = DAG(
+#         f'config_error_{config_name}',
+#         default_args={'owner': 'framework', 'start_date': datetime(2024, 1, 1), 'retries': 0},
+#         description=f'Config Error in {config_name}: {error_message[:50]}...',
+#         schedule=None,
+#         catchup=False,
+#         tags=['error', 'config', 'framework']
+#     )
+    
+#     PythonOperator(task_id='show_error', python_callable=show_config_error, dag=dag)
+#     return dag
+
+# def create_factory_error_dag(error_message):
+#     """Create DAG to show factory errors"""
+#     from airflow import DAG
+#     from airflow.operators.python import PythonOperator
+    
+#     def show_factory_error(**context):
+#         logger.error(f"DAG Factory Error: {error_message}")
+#         raise Exception(f"DAG Factory failed: {error_message}")
+    
+#     dag = DAG(
+#         'framework_factory_error',
+#         default_args={'owner': 'framework', 'start_date': datetime(2024, 1, 1), 'retries': 0},
+#         description=f'Factory Error: {error_message[:50]}...',
+#         schedule=None,
+#         catchup=False,
+#         tags=['error', 'factory', 'framework']
+#     )
+    
+#     PythonOperator(task_id='show_error', python_callable=show_factory_error, dag=dag)
+#     return dag
+
+# def create_general_error_dag(error_message):
+#     """Create DAG to show general errors"""
+#     from airflow import DAG
+#     from airflow.operators.python import PythonOperator
+    
+#     def show_general_error(**context):
+#         logger.error(f"General Framework Error: {error_message}")
+#         raise Exception(f"Framework error: {error_message}")
+    
+#     dag = DAG(
+#         'framework_general_error',
+#         default_args={'owner': 'framework', 'start_date': datetime(2024, 1, 1), 'retries': 0},
+#         description=f'General Error: {error_message[:50]}...',
+#         schedule=None,
+#         catchup=False,
+#         tags=['error', 'general', 'framework']
+#     )
+    
+#     PythonOperator(task_id='show_error', python_callable=show_general_error, dag=dag)
+#     return dag
+
+# =============================================================================
+# MAIN EXECUTION - This is where DAGs are created and exported
+# =============================================================================
+
+logger.info("🚀 Framework main.py starting...")
+
+# Dictionary to collect all DAGs
+all_dags = {}
+
+try:
+    # 1. Always create a test DAG first (guaranteed to work)
+    # test_dag = create_test_dag()
+    # all_dags[test_dag.dag_id] = test_dag
+    # logger.info(f"✅ Created test DAG: {test_dag.dag_id}")
+    
+    # 2. Try to create metadata-based DAGs
+    metadata_dags = create_metadata_dags()
+    all_dags.update(metadata_dags)
+    
+    if metadata_dags:
+        logger.info(f"✅ Created {len(metadata_dags)} metadata DAGs: {list(metadata_dags.keys())}")
+    else:
+        logger.info("ℹ️ No metadata DAGs created")
+    
+    logger.info(f"🎉 Total DAGs created: {len(all_dags)}")
+
+except Exception as e:
+    logger.error(f"❌ Critical error in main.py: {e}")
+    # Create emergency DAG
+    # emergency_dag = create_general_error_dag(f"Critical main.py error: {str(e)}")
+    # all_dags[emergency_dag.dag_id] = emergency_dag
+
+# =============================================================================
+# CRITICAL: Export all DAGs to globals() so Airflow can find them
+# =============================================================================
+
+logger.info("📤 Exporting DAGs to global namespace...")
+for dag_id, dag_obj in all_dags.items():
+    globals()[dag_id] = dag_obj
+    logger.info(f"   ✅ Exported: {dag_id}")
+
+# Also export the dictionary for debugging
+globals()['framework_all_dags'] = all_dags
+
+logger.info(f"🎯 Final exported DAGs: {list(all_dags.keys())}")
+logger.info("📋 Framework main.py completed successfully!")
+
+# =============================================================================
+# END OF MAIN.PY
+# =============================================================================
