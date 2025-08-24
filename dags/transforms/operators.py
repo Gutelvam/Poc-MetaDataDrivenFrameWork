@@ -24,6 +24,42 @@ from core.config import TaskConfig
 
 logger = logging.getLogger(__name__)
 
+
+def clean_decimal_types(data):
+        """Convert Decimal types to float for SQLite compatibility"""
+        import pandas as pd
+        from decimal import Decimal
+        
+        if isinstance(data, list):
+            # Convert list of dictionaries
+            cleaned_data = []
+            for item in data:
+                cleaned_item = {}
+                for key, value in item.items():
+                    if isinstance(value, Decimal):
+                        cleaned_item[key] = float(value)
+                    else:
+                        cleaned_item[key] = value
+                cleaned_data.append(cleaned_item)
+            return cleaned_data
+        
+        elif isinstance(data, pd.DataFrame):
+            # Convert DataFrame
+            df = data.copy()
+            for column in df.columns:
+                if df[column].dtype == 'object':
+                    # Check if column contains Decimal values
+                    if any(isinstance(val, Decimal) for val in df[column].dropna()):
+                        df[column] = df[column].apply(
+                            lambda x: float(x) if isinstance(x, Decimal) else x
+                        )
+                        df[column] = pd.to_numeric(df[column], errors='coerce')
+            return df
+        
+        return data
+
+
+
 class SQLTransformOperator(BaseOperator):
     """Execute SQL transformations on data - Airflow 3.x compatible"""
     
@@ -79,22 +115,36 @@ class SQLTransformOperator(BaseOperator):
         
         raise NotImplementedError("Database SQL execution not implemented in this example")
     
+
     def _execute_sql_with_pandas(self, context, datasets: Dict[str, pd.DataFrame]) -> List[Dict]:
-        """Execute SQL using pandas (limited SQL support)"""
+        """Execute SQL using pandas with Decimal handling"""
         import pandasql as ps
         
-        # Make datasets available to SQL query
-        local_env = datasets.copy()
+        # Clean datasets before processing
+        cleaned_datasets = {}
+        for key, data in datasets.items():
+            cleaned_datasets[key] = clean_decimal_types(data)
+        
+        # Make cleaned datasets available to SQL query
+        local_env = cleaned_datasets.copy()
+        
+        # Add context variables safely
         local_env.update({
-            'execution_date': context['execution_date'],
-            'ds': context['ds'],
-            'ts': context['ts']
+            'execution_date': context.get('execution_date'),
+            'ds': context.get('ds'),
+            'ts': context.get('ts')
         })
+        
+        # Filter out None values
+        local_env = {k: v for k, v in local_env.items() if v is not None}
         
         try:
             # Execute SQL query
             result_df = ps.sqldf(self.sql_query, local_env)
-            return result_df.to_dict('records')
+            
+            # Clean result as well
+            cleaned_result = clean_decimal_types(result_df)
+            return cleaned_result.to_dict('records') if isinstance(cleaned_result, pd.DataFrame) else cleaned_result
             
         except Exception as e:
             logger.error(f"pandas SQL execution failed: {str(e)}")
@@ -588,6 +638,331 @@ def create_aggregation_transform_operator(
         data_source_task_id=data_source_task_id,
         group_by_columns=group_by_columns,
         aggregations=aggregations,
+        dag=dag,
+        **kwargs
+    )
+
+class FixedPythonTransformOperator(BaseOperator):
+    """Execute Python transformations on data - Fixed for inline code support"""
+    
+    def __init__(
+        self,
+        python_callable: Union[str, Callable],
+        data_source_task_ids: Union[str, List[str]],
+        op_args: Optional[tuple] = None,
+        op_kwargs: Optional[Dict] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.python_callable = python_callable
+        self.data_source_task_ids = data_source_task_ids if isinstance(data_source_task_ids, list) else [data_source_task_ids]
+        self.op_args = op_args or ()
+        self.op_kwargs = op_kwargs or {}
+    
+    def execute(self, context):
+        """Execute Python transformation"""
+        try:
+            # Get data from upstream tasks
+            datasets = {}
+            for task_id in self.data_source_task_ids:
+                data = context['task_instance'].xcom_pull(task_ids=task_id)
+                if data:
+                    datasets[task_id] = data
+                else:
+                    logger.warning(f"No data received from task: {task_id}")
+            
+            if not datasets:
+                logger.warning("No data available for Python transformation")
+                return []
+            
+            logger.info(f"Available datasets: {list(datasets.keys())}")
+            
+            # Handle callable resolution
+            if isinstance(self.python_callable, str):
+                # Check if it's inline code or module path
+                if self._is_inline_code(self.python_callable):
+                    callable_func = self._execute_inline_code(self.python_callable)
+                else:
+                    callable_func = self._resolve_callable_from_string(self.python_callable)
+            else:
+                callable_func = self.python_callable
+            
+            # Prepare arguments
+            args = (datasets,) + self.op_args
+            kwargs = {**self.op_kwargs, 'context': context}
+            
+            # Execute transformation
+            result = callable_func(*args, **kwargs)
+            
+            logger.info(f"Python transformation completed successfully")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Python transformation failed: {str(e)}")
+            raise
+    
+    def _is_inline_code(self, code_string: str) -> bool:
+        """Check if the string is inline Python code vs module path"""
+        # If it contains 'def ', 'import ', or starts with whitespace, it's likely inline code
+        inline_indicators = ['def ', 'import ', 'from ', 'class ', '\n', '    ']
+        return any(indicator in code_string for indicator in inline_indicators)
+    
+    def _execute_inline_code(self, code_string: str) -> Callable:
+        """Execute inline Python code and return the callable"""
+        try:
+            # Clean up the code string
+            code_lines = code_string.strip().split('\n')
+            
+            # Find the function name from the def statement
+            function_name = None
+            for line in code_lines:
+                if line.strip().startswith('def '):
+                    # Extract function name: "def function_name(" -> "function_name"
+                    func_def = line.strip()
+                    start = func_def.find('def ') + 4
+                    end = func_def.find('(')
+                    function_name = func_def[start:end].strip()
+                    break
+            
+            if not function_name:
+                raise ValueError("No function definition found in inline code")
+            
+            # Create a local namespace with common imports
+            local_namespace = {
+                'pd': pd,
+                'pandas': pd,
+                'json': json,
+                'logger': logger,
+                'datetime': datetime
+            }
+            
+            # Execute the code in the local namespace
+            exec(code_string, {}, local_namespace)
+            
+            # Return the function from the namespace
+            if function_name in local_namespace:
+                return local_namespace[function_name]
+            else:
+                raise ValueError(f"Function '{function_name}' not found after executing inline code")
+                
+        except Exception as e:
+            logger.error(f"Failed to execute inline code: {str(e)}")
+            logger.error(f"Code was: {code_string}")
+            raise AirflowException(f"Inline code execution failed: {str(e)}")
+    
+    def _resolve_callable_from_string(self, callable_string: str) -> Callable:
+        """Resolve callable from string (module.function format)"""
+        try:
+            if '.' not in callable_string:
+                raise ValueError(f"Callable string '{callable_string}' must be in 'module.function' format")
+            
+            module_name, function_name = callable_string.rsplit('.', 1)
+            module = importlib.import_module(module_name)
+            return getattr(module, function_name)
+        except Exception as e:
+            raise AirflowException(f"Failed to resolve callable '{callable_string}': {str(e)}")
+
+# Enhanced version that can also handle script files
+class InlineCodeTransformOperator(BaseOperator):
+    """
+    Enhanced transform operator that can handle:
+    1. Inline Python code from YAML
+    2. Python script files
+    3. Module.function references
+    """
+    
+    def __init__(
+        self,
+        python_code: str,
+        data_source_task_ids: Union[str, List[str]],
+        code_type: str = "auto",  # "auto", "inline", "file", "module"
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.python_code = python_code
+        self.data_source_task_ids = data_source_task_ids if isinstance(data_source_task_ids, list) else [data_source_task_ids]
+        self.code_type = code_type
+    
+    def execute(self, context):
+        """Execute Python transformation with enhanced code handling"""
+        try:
+            # Get data from upstream tasks
+            datasets = {}
+            for task_id in self.data_source_task_ids:
+                data = context['task_instance'].xcom_pull(task_ids=task_id)
+                if data:
+                    datasets[task_id] = data
+                else:
+                    logger.warning(f"No data received from task: {task_id}")
+            
+            logger.info(f"Processing {len(datasets)} datasets: {list(datasets.keys())}")
+            
+            # Determine code type if auto
+            if self.code_type == "auto":
+                self.code_type = self._detect_code_type(self.python_code)
+            
+            # Execute based on code type
+            if self.code_type == "inline":
+                result = self._execute_inline_transform(datasets, context)
+            elif self.code_type == "file":
+                result = self._execute_file_transform(datasets, context)
+            elif self.code_type == "module":
+                result = self._execute_module_transform(datasets, context)
+            else:
+                raise ValueError(f"Unknown code type: {self.code_type}")
+            
+            logger.info(f"Transform completed. Result type: {type(result)}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Enhanced Python transformation failed: {str(e)}")
+            raise
+    
+    def _detect_code_type(self, code: str) -> str:
+        """Auto-detect the type of Python code"""
+        if code.startswith('/') or code.endswith('.py'):
+            return "file"
+        elif '.' in code and not any(keyword in code for keyword in ['def ', 'import ', '\n']):
+            return "module"
+        else:
+            return "inline"
+    
+    def _execute_inline_transform(self, datasets: Dict, context) -> Any:
+        """Execute inline Python code"""
+        # Create execution environment
+        exec_env = {
+            'datasets': datasets,
+            'context': context,
+            'pd': pd,
+            'pandas': pd,
+            'json': json,
+            'logger': logger,
+            'datetime': datetime
+        }
+        
+        # Execute the code
+        try:
+            exec(self.python_code, exec_env)
+            
+            # Look for result in various possible names
+            result_candidates = ['result', 'output', 'data', 'transformed_data']
+            
+            for candidate in result_candidates:
+                if candidate in exec_env:
+                    return exec_env[candidate]
+            
+            # If no explicit result, look for the last function defined and call it
+            functions = [name for name, obj in exec_env.items() 
+                        if callable(obj) and not name.startswith('_') 
+                        and name not in ['pd', 'pandas', 'json', 'logger', 'datetime']]
+            
+            if functions:
+                func_name = functions[-1]  # Use the last defined function
+                func = exec_env[func_name]
+                logger.info(f"Calling function: {func_name}")
+                return func(datasets, **context)
+            
+            raise ValueError("No result found and no callable function detected")
+            
+        except Exception as e:
+            logger.error(f"Inline code execution failed: {str(e)}")
+            logger.error(f"Code: {self.python_code}")
+            raise
+    
+    def _execute_file_transform(self, datasets: Dict, context) -> Any:
+        """Execute Python file"""
+        if not Path(self.python_code).exists():
+            raise FileNotFoundError(f"Python file not found: {self.python_code}")
+        
+        # Load and execute the file
+        spec = importlib.util.spec_from_file_location("transform_module", self.python_code)
+        module = importlib.util.module_from_spec(spec)
+        
+        # Add context to module
+        module.datasets = datasets
+        module.context = context
+        module.pd = pd
+        module.logger = logger
+        
+        spec.loader.exec_module(module)
+        
+        # Look for transform function or main function
+        if hasattr(module, 'transform'):
+            return module.transform(datasets, **context)
+        elif hasattr(module, 'main'):
+            return module.main(datasets, **context)
+        else:
+            raise ValueError(f"No 'transform' or 'main' function found in {self.python_code}")
+    
+    def _execute_module_transform(self, datasets: Dict, context) -> Any:
+        """Execute module.function reference"""
+        try:
+            module_name, function_name = self.python_code.rsplit('.', 1)
+            module = importlib.import_module(module_name)
+            func = getattr(module, function_name)
+            return func(datasets, **context)
+        except Exception as e:
+            raise AirflowException(f"Module execution failed: {str(e)}")
+
+# Factory functions
+def create_fixed_python_transform_operator(
+    task_id: str,
+    python_callable: Union[str, Callable],
+    data_source_task_ids: Union[str, List[str]],
+    dag,
+    op_args: Optional[tuple] = None,
+    op_kwargs: Optional[Dict] = None,
+    **kwargs
+) -> FixedPythonTransformOperator:
+    """Factory function to create fixed Python transform operator"""
+    
+    return FixedPythonTransformOperator(
+        task_id=task_id,
+        python_callable=python_callable,
+        data_source_task_ids=data_source_task_ids,
+        op_args=op_args,
+        op_kwargs=op_kwargs,
+        dag=dag,
+        **kwargs
+    )
+
+def create_inline_code_transform_operator(
+    task_id: str,
+    python_code: str,
+    data_source_task_ids: Union[str, List[str]],
+    dag,
+    code_type: str = "auto",
+    **kwargs
+) -> InlineCodeTransformOperator:
+    """Factory function to create inline code transform operator"""
+    
+    return InlineCodeTransformOperator(
+        task_id=task_id,
+        python_code=python_code,
+        data_source_task_ids=data_source_task_ids,
+        code_type=code_type,
+        dag=dag,
+        **kwargs
+    )
+
+# For backward compatibility
+def create_python_transform_operator(
+    task_id: str,
+    python_callable: Union[str, Callable],
+    data_source_task_ids: Union[str, List[str]],
+    dag,
+    op_args: Optional[tuple] = None,
+    op_kwargs: Optional[Dict] = None,
+    **kwargs
+) -> FixedPythonTransformOperator:
+    """Factory function to create Python transform operator (fixed version)"""
+    
+    return FixedPythonTransformOperator(
+        task_id=task_id,
+        python_callable=python_callable,
+        data_source_task_ids=data_source_task_ids,
+        op_args=op_args,
+        op_kwargs=op_kwargs,
         dag=dag,
         **kwargs
     )

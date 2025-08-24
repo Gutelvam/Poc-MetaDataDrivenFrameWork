@@ -1,84 +1,26 @@
+# monitoring/prometheus/prometheus.yml
+# Fixed Prometheus configuration for Airflow Framework monitoring
+
 global:
   scrape_interval: 15s
-  evaluation_interval: 15s
-  external_labels:
-    cluster: 'airflow-framework'
-    environment: 'development'
-
+  
 rule_files:
   - "airflow_rules.yml"
-
-scrape_configs:
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
-
-  - job_name: 'airflow-api-server-1'
-    static_configs:
-      - targets: ['airflow-api-server-1:8080']
-    metrics_path: '/admin/metrics'
-    scrape_interval: 30s
-    scrape_timeout: 10s
-
-  - job_name: 'airflow-scheduler'
-    static_configs:
-      - targets: ['airflow-scheduler:8974']
-    metrics_path: '/health'
-    scrape_interval: 30s
-
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres:5432']
-    scrape_interval: 30s
-
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis:6379']
-    scrape_interval: 30s
-
-  - job_name: 'framework-metrics'
-    static_configs:
-      - targets: ['airflow-api-server-1:8080']
-    metrics_path: '/api/v1/framework/metrics'
-    scrape_interval: 60s
-    scrape_timeout: 30s
-    honor_labels: true
-    
-  # Pipeline-specific metrics
-  - job_name: 'pipeline-health'
-    static_configs:
-      - targets: ['airflow-api-server-1:8080']
-    metrics_path: '/api/v1/framework/health'
-    scrape_interval: 120s
-    scrape_timeout: 30s
-
-  # Data quality metrics
-  - job_name: 'data-quality'
-    static_configs:
-      - targets: ['airflow-api-server-1:8080']
-    metrics_path: '/api/v1/framework/quality-metrics'
-    scrape_interval: 300s
-    scrape_timeout: 60s
 
 alerting:
   alertmanagers:
     - static_configs:
         - targets: []
 
-# Storage configuration
-storage:
-  tsdb:
-    retention.time: 30d
-    retention.size: 10GB
-    path: /prometheus
-    
-# Additional configuration for better performance
-global:
-  scrape_timeout: 10s
-  query_log_file: /prometheus/query.log
 
-# Limit resource usage
-limits:
-  query_timeout: 2m
-  query_max_samples: 50000000
-  query_max_series: 100000
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Main job: Scrape Airflow metrics from StatsD exporter  
+  - job_name: 'airflow_metrics'
+    static_configs:
+      - targets: ['prometheus-statsd:9102']
+    metrics_path: '/metrics'
+    scrape_interval: 15s

@@ -1,5 +1,5 @@
-dag_id: pipeline_exemplo_completo
-description: "Pipeline completo demonstrando todas as funcionalidades do framework"
+dag_id: pipeline_exemplo_completo_fixed
+description: "Pipeline completo com acesso correto aos dados entre tarefas"
 pipeline_type: batch
 schedule_interval: "0 2 * * *"
 start_date: "2024-01-01"
@@ -11,6 +11,7 @@ tags:
   - etl
   - completo
   - framework
+  - fixed
 
 # Configurações globais de qualidade
 global_quality_rules:
@@ -39,7 +40,7 @@ tasks:
       name: customers_source
       type: postgresql
       connection_id: postgres_dev
-      schema_name: test_data
+      schema_name: public
       table_name: customers
       query: |
         SELECT 
@@ -56,9 +57,9 @@ tasks:
           total_spent,
           last_order_date,
           is_active
-        FROM test_data.customers 
+        FROM public.customers 
         WHERE is_active = true
-        AND registration_date >= '{{ macros.ds_add(ds, -30) }}'
+        AND registration_date >= (CURRENT_DATE - INTERVAL '30 days')
     retries: 3
     retry_delay: 300
 
@@ -71,7 +72,7 @@ tasks:
       name: orders_source
       type: postgresql
       connection_id: postgres_dev
-      schema_name: test_data
+      schema_name: public
       table_name: orders
       query: |
         SELECT 
@@ -85,8 +86,8 @@ tasks:
           shipping_country,
           discount_amount,
           tax_amount
-        FROM test_data.orders 
-        WHERE order_date = '{{ ds }}'
+        FROM public.orders 
+        WHERE order_date >= (CURRENT_DATE - INTERVAL '30 days')
         AND order_status = 'completed'
 
   # Verificação de qualidade dos clientes
@@ -145,11 +146,37 @@ tasks:
         threshold: 1.0
         severity: critical
 
-  # Transformação dos dados
-  - task_id: transformar_customer_summary
+  # # OPÇÃO 1: Transformação usando dados das verificações de qualidade
+  # - task_id: transformar_customer_summary_v1
+  #   operator_type: transform
+  #   description: "Cria resumo dos clientes (usando dados de qualidade)"
+  #   depends_on: [qualidade_customers, qualidade_orders]
+  #   sql_transform: |
+  #     SELECT 
+  #       c.customer_id,
+  #       c.first_name || ' ' || c.last_name as full_name,
+  #       c.email,
+  #       c.customer_segment,
+  #       c.country,
+  #       c.city,
+  #       c.age,
+  #       c.registration_date,
+  #       COALESCE(COUNT(o.order_id), 0) as orders_count,
+  #       COALESCE(SUM(o.order_amount), 0) as total_spent_today,
+  #       COALESCE(AVG(o.order_amount), 0) as avg_order_value,
+  #       CURRENT_DATE as processing_date,
+  #       CURRENT_TIMESTAMP as processed_at
+  #     FROM qualidade_customers c
+  #     LEFT JOIN qualidade_orders o ON c.customer_id = o.customer_id
+  #     GROUP BY 
+  #       c.customer_id, c.first_name, c.last_name, c.email,
+  #       c.customer_segment, c.country, c.city, c.age, c.registration_date
+
+  # OPÇÃO 2: Transformação usando dados diretos das extrações
+  - task_id: transformar_customer_summary_v2
     operator_type: transform
-    description: "Cria resumo dos clientes"
-    depends_on: [qualidade_customers, qualidade_orders]
+    description: "Cria resumo dos clientes (usando dados originais)"
+    depends_on: [extrair_customers, extrair_orders]
     sql_transform: |
       SELECT 
         c.customer_id,
@@ -163,7 +190,7 @@ tasks:
         COALESCE(COUNT(o.order_id), 0) as orders_count,
         COALESCE(SUM(o.order_amount), 0) as total_spent_today,
         COALESCE(AVG(o.order_amount), 0) as avg_order_value,
-        '{{ ds }}' as processing_date,
+        CURRENT_DATE as processing_date,
         CURRENT_TIMESTAMP as processed_at
       FROM extrair_customers c
       LEFT JOIN extrair_orders o ON c.customer_id = o.customer_id
@@ -171,21 +198,72 @@ tasks:
         c.customer_id, c.first_name, c.last_name, c.email,
         c.customer_segment, c.country, c.city, c.age, c.registration_date
 
-  # Agregação por categoria
+  # # OPÇÃO 3: Transformação Python (mais flexível)
+  # - task_id: transformar_customer_summary_python
+  #   operator_type: transform
+  #   description: "Cria resumo usando Python"
+  #   depends_on: [extrair_customers, extrair_orders]
+  #   python_transform: |
+  #     def create_customer_summary(datasets, **context):
+  #         import pandas as pd
+          
+  #         # Obter dados dos datasets
+  #         customers = pd.DataFrame(datasets.get('extrair_customers', []))
+  #         orders = pd.DataFrame(datasets.get('extrair_orders', []))
+          
+  #         if customers.empty:
+  #             return []
+          
+  #         # Criar resumo
+  #         summary = customers.copy()
+  #         summary['full_name'] = summary['first_name'] + ' ' + summary['last_name']
+          
+  #         if not orders.empty:
+  #             # Agregar pedidos por cliente
+  #             order_summary = orders.groupby('customer_id').agg({
+  #                 'order_id': 'count',
+  #                 'order_amount': ['sum', 'mean']
+  #             }).round(2)
+              
+  #             order_summary.columns = ['orders_count', 'total_spent_today', 'avg_order_value']
+  #             order_summary = order_summary.reset_index()
+              
+  #             # Juntar com dados dos clientes
+  #             summary = summary.merge(order_summary, on='customer_id', how='left')
+          
+  #         # Preencher valores faltantes
+  #         summary['orders_count'] = summary['orders_count'].fillna(0)
+  #         summary['total_spent_today'] = summary['total_spent_today'].fillna(0)
+  #         summary['avg_order_value'] = summary['avg_order_value'].fillna(0)
+          
+  #         # Adicionar metadados
+  #         summary['processing_date'] = context['ds']
+  #         summary['processed_at'] = context['ts']
+          
+  #         return summary.to_dict('records')
+
+  # Agregação por categoria (usando dados diretos)
   - task_id: agregar_por_categoria
     operator_type: transform
     description: "Agrega vendas por categoria"
     depends_on: [extrair_orders]
     python_transform: |
+      # Or even better, this comprehensive version:
       def aggregate_by_category(datasets, **context):
           import pandas as pd
+          from datetime import datetime
           
           orders = pd.DataFrame(datasets['extrair_orders'])
           
           if orders.empty:
               return []
           
-          # Agregação por categoria
+          # Convert numeric columns safely
+          for col in ['order_amount', 'discount_amount', 'tax_amount']:
+              if col in orders.columns:
+                  orders[col] = pd.to_numeric(orders[col], errors='coerce').fillna(0.0)
+          
+          # Aggregation by category
           category_summary = orders.groupby('product_category').agg({
               'order_amount': ['sum', 'mean', 'count'],
               'discount_amount': 'sum',
@@ -196,32 +274,50 @@ tasks:
           category_summary.columns = ['_'.join(col).strip() for col in category_summary.columns]
           category_summary = category_summary.reset_index()
           
-          # Add metadata
-          category_summary['processing_date'] = context['ds']
+          # SAFE context access - this is the key fix
+          processing_date = context.get('ds')
+          if not processing_date:
+              execution_date = context.get('execution_date')
+              if execution_date:
+                  processing_date = execution_date.strftime('%Y-%m-%d')
+              else:
+                  processing_date = datetime.now().strftime('%Y-%m-%d')
+          
+          category_summary['processing_date'] = processing_date
           category_summary['total_categories'] = len(category_summary)
           
           return category_summary.to_dict('records')
 
-  # Validação e limpeza de dados
+  # Validação e limpeza usando Python (mais confiável)
   - task_id: validar_e_limpar
     operator_type: transform
     description: "Valida e limpa os dados transformados"
-    depends_on: [transformar_customer_summary]
-    custom_params:
-      validation_rules:
-        remove_duplicates: true
-        duplicate_subset: ['customer_id']
-        missing_values:
-          email: 'drop'
-          total_spent_today: 'fill_zero'
-          avg_order_value: 'fill_zero'
-        type_conversions:
-          processing_date: 'datetime'
-          total_spent_today: 'numeric'
-        range_validations:
-          total_spent_today:
-            min: 0
-            max: 50000
+    depends_on: [transformar_customer_summary_v2]
+    python_transform: |
+      def validate_and_clean(datasets, **context):
+          import pandas as pd
+          
+          data = pd.DataFrame(datasets['transformar_customer_summary_v2'])
+          
+          if data.empty:
+              return []
+          
+          # Remover duplicatas
+          data = data.drop_duplicates(subset=['customer_id'])
+          
+          # Validar email
+          data = data[data['email'].notna()]
+          data = data[data['email'].str.contains('@', na=False)]
+          
+          # Limpar valores monetários
+          data['total_spent_today'] = data['total_spent_today'].fillna(0)
+          data['avg_order_value'] = data['avg_order_value'].fillna(0)
+          
+          # Validar ranges
+          data = data[data['total_spent_today'] >= 0]
+          data = data[data['total_spent_today'] <= 50000]
+          
+          return data.to_dict('records')
 
   # Carregamento para o data warehouse
   - task_id: carregar_customer_summary
@@ -232,7 +328,7 @@ tasks:
       name: customer_summary_dw
       type: postgresql
       connection_id: postgres_dev
-      schema_name: test_data
+      schema_name: public
       table_name: customer_daily_summary
       write_mode: upsert
       upsert_keys: [customer_id, processing_date]
@@ -262,7 +358,7 @@ tasks:
       name: category_summary_dw
       type: postgresql
       connection_id: postgres_dev
-      schema_name: test_data
+      schema_name: public
       table_name: category_daily_summary
       write_mode: append
       auto_create_table: true
@@ -272,7 +368,7 @@ tasks:
   - task_id: relatorio_qualidade
     operator_type: quality_check
     description: "Gera relatório final de qualidade"
-    depends_on: [carregar_customer_summary, carregar_category_summary]
+    depends_on: [validar_e_limpar]  # ✅ This returns actual data
     quality_rules:
       - name: check_completeness
         rule_type: completeness
@@ -283,7 +379,7 @@ tasks:
   - task_id: notificar_sucesso
     operator_type: custom
     description: "Notifica sucesso do pipeline"
-    depends_on: [relatorio_qualidade]
+    depends_on: [carregar_customer_summary, carregar_category_summary, relatorio_qualidade]
     custom_function: |
       def notify_success(**context):
           import logging
@@ -315,4 +411,3 @@ retry_delay: 600  # 10 minutos
 # Configurações de reprocessamento
 allow_reprocessing: true
 reprocess_lookback_days: 7
-

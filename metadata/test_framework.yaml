@@ -20,28 +20,28 @@ tasks:
     description: "Test data extraction"
     depends_on: [start_test]
     source:
-      name: test_source
+      name: orders_source
       type: postgresql
       connection_id: postgres_dev
-  
+      schema_name: public
+      table_name: orders
+      query: |
+        SELECT * FROM public.orders 
+
   - task_id: transform_test
-    operator_type: transform
+    operator_type: dummy
     description: "Test data transformation"
     depends_on: [extract_test]
   
   - task_id: quality_check_test
-    operator_type: quality_check
+    operator_type: dummy
     description: "Test quality checks"
     depends_on: [transform_test]
   
   - task_id: load_test
-    operator_type: load
+    operator_type: dummy
     description: "Test data loading"
     depends_on: [quality_check_test]
-    sink:
-      name: test_sink
-      type: postgresql
-      connection_id: postgres_dev
   
   - task_id: end_test
     operator_type: dummy

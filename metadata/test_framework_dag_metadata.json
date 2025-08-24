@@ -1,0 +1,106 @@
+{
+  "dag_id": "test_framework_dag",
+  "created_at": "2025-08-22T19:45:33.272364",
+  "version": "1.0",
+  "config": {
+    "dag_id": "test_framework_dag",
+    "description": "Test DAG to verify framework is working",
+    "pipeline_type": "batch",
+    "start_date": "2024-01-01",
+    "catchup": false,
+    "max_active_runs": 1,
+    "tags": [
+      "test",
+      "framework",
+      "verification",
+      "monitored"
+    ],
+    "owner": "framework-team",
+    "tasks": [
+      {
+        "task_id": "start_test",
+        "operator_type": "dummy",
+        "description": "Start of test pipeline",
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "extract_test",
+        "operator_type": "extract",
+        "description": "Test data extraction",
+        "source": {
+          "name": "orders_source",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "schema_name": "public",
+          "table_name": "orders",
+          "query": "SELECT * FROM public.orders \n"
+        },
+        "depends_on": [
+          "start_test"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "transform_test",
+        "operator_type": "dummy",
+        "description": "Test data transformation",
+        "depends_on": [
+          "extract_test"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "quality_check_test",
+        "operator_type": "dummy",
+        "description": "Test quality checks",
+        "depends_on": [
+          "transform_test"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "load_test",
+        "operator_type": "dummy",
+        "description": "Test data loading",
+        "depends_on": [
+          "quality_check_test"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "end_test",
+        "operator_type": "dummy",
+        "description": "End of test pipeline",
+        "depends_on": [
+          "load_test"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      }
+    ],
+    "dependencies": [],
+    "retries": 1,
+    "retry_delay": 300,
+    "allow_reprocessing": true,
+    "reprocess_lookback_days": 30
+  },
+  "validation_status": "valid",
+  "last_updated": "2025-08-22T19:45:33.272368"
+}

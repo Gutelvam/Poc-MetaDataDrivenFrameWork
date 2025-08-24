@@ -1,0 +1,198 @@
+# monitoring/prometheus/airflow_alerts.yml
+# Prometheus alerting rules for Airflow Framework
+
+groups:
+  - name: airflow_framework_alerts
+    rules:
+      # High failure rate alert
+      - alert: HighPipelineFailureRate
+        expr: |
+          (
+            sum(rate(airflow_pipeline_runs_total{status="failed"}[5m])) / 
+            sum(rate(airflow_pipeline_runs_total[5m]))
+          ) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: pipeline
+        annotations:
+          summary: "High pipeline failure rate detected"
+          description: "Pipeline failure rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+      # DAG not running
+      - alert: DAGNotRunning
+        expr: |
+          time() - max(airflow_pipeline_runs_total) by (dag_id) > 86400
+        for: 5m
+        labels:
+          severity: warning
+          component: pipeline
+        annotations:
+          summary: "DAG {{ $labels.dag_id }} has not run in 24 hours"
+          description: "DAG {{ $labels.dag_id }} last ran {{ $value | humanizeDuration }} ago"
+
+      # Long running pipeline
+      - alert: LongRunningPipeline
+        expr: |
+          histogram_quantile(0.95, rate(airflow_pipeline_duration_seconds_bucket[10m])) > 3600
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "Pipelines taking longer than expected"
+          description: "95th percentile pipeline duration is {{ $value | humanizeDuration }}"
+
+      # Data quality degradation
+      - alert: DataQualityDegradation
+        expr: |
+          airflow_data_quality_score < 0.8
+        for: 2m
+        labels:
+          severity: critical
+          component: data_quality
+        annotations:
+          summary: "Data quality score below threshold"
+          description: "Data quality score for {{ $labels.dag_id }}.{{ $labels.task_id }}.{{ $labels.rule_name }} is {{ $value | humanizePercentage }}"
+
+      # Framework health
+      - alert: FrameworkUnhealthy
+        expr: |
+          airflow_framework_health{component="scheduler"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Framework component unhealthy"
+          description: "Framework component {{ $labels.component }} is reporting unhealthy status"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(airflow_errors_total[5m])) by (dag_id) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: errors
+        annotations:
+          summary: "High error rate in DAG {{ $labels.dag_id }}"
+          description: "Error rate for DAG {{ $labels.dag_id }} is {{ $value }} errors/second"
+
+      # SLA violations
+      - alert: SLAViolations
+        expr: |
+          increase(airflow_sla_violations_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          component: sla
+        annotations:
+          summary: "SLA violation detected"
+          description: "{{ $value }} SLA violations detected for DAG {{ $labels.dag_id }} in the last 5 minutes"
+
+      # No data processing
+      - alert: NoDataProcessing
+        expr: |
+          sum(rate(airflow_records_processed_total[10m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: data_processing
+        annotations:
+          summary: "No data processing activity detected"
+          description: "No records have been processed in the last 10 minutes"
+
+      # Task duration anomaly
+      - alert: TaskDurationAnomaly
+        expr: |
+          (
+            histogram_quantile(0.95, rate(airflow_task_duration_seconds_bucket[10m])) /
+            histogram_quantile(0.50, rate(airflow_task_duration_seconds_bucket[10m]))
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "Task duration variance is high"
+          description: "Task duration 95th percentile is {{ $value }}x the median, indicating performance issues"
+
+      # Framework metrics collection failure
+      - alert: MetricsCollectionFailure
+        expr: |
+          up{job="framework-metrics"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: "Framework metrics collection is down"
+          description: "Unable to collect framework metrics from the metrics endpoint"
+
+  - name: airflow_infrastructure_alerts
+    rules:
+      # Scheduler down
+      - alert: SchedulerDown
+        expr: |
+          up{job="airflow-scheduler"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Airflow Scheduler is down"
+          description: "Airflow Scheduler health check is failing"
+
+      # API Server down
+      - alert: APIServerDown
+        expr: |
+          up{job="airflow-api-server"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Airflow API Server is down"
+          description: "Airflow API Server is not responding to health checks"
+
+      # Too many active tasks
+      - alert: TooManyActiveTasks
+        expr: |
+          sum(airflow_active_tasks) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: capacity
+        annotations:
+          summary: "High number of active tasks"
+          description: "{{ $value }} active tasks detected, may indicate capacity issues"
+
+  - name: airflow_data_alerts
+    rules:
+      # Data freshness issue
+      - alert: DataFreshnessIssue
+        expr: |
+          airflow_data_quality_score{rule_name="data_freshness"} < 1.0
+        for: 5m
+        labels:
+          severity: warning
+          component: data_quality
+        annotations:
+          summary: "Data freshness issue detected"
+          description: "Data freshness check failed for {{ $labels.dag_id }}.{{ $labels.task_id }}"
+
+      # Record processing rate drop
+      - alert: RecordProcessingRateDrop
+        expr: |
+          (
+            rate(airflow_records_processed_total[5m]) /
+            rate(airflow_records_processed_total[30m] offset 1h)
+          ) < 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: data_processing
+        annotations:
+          summary: "Record processing rate has dropped significantly"
+          description: "Current processing rate is {{ $value | humanizePercentage }} of the historical rate"

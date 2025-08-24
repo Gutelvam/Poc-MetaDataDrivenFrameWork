@@ -1,0 +1,309 @@
+# monitoring/prometheus/airflow_rules.yml
+# Prometheus alerting rules for Airflow + Framework metrics
+
+groups:
+  # ============================================
+  # DAG-level alerts
+  # ============================================
+  
+  - name: airflow_dag_alerts
+    rules:
+      # DAG failure rate
+      - alert: HighDAGFailureRate
+        expr: |
+          (
+            rate(airflow_dag_run_failed_total[5m]) / 
+            (rate(airflow_dag_run_failed_total[5m]) + rate(airflow_dag_run_success_total[5m]))
+          ) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: dag
+        annotations:
+          summary: "High DAG failure rate detected"
+          description: "DAG {{ $labels.dag_id }} has a failure rate of {{ $value | humanizePercentage }} over the last 5 minutes"
+
+      # DAG hasn't run in expected time
+      - alert: DAGNotRunning
+        expr: |
+          (time() - airflow_dag_run_success_total) > 86400
+        for: 5m
+        labels:
+          severity: critical
+          component: dag
+        annotations:
+          summary: "DAG hasn't run successfully in 24 hours"
+          description: "DAG {{ $labels.dag_id }} last successful run was more than 24 hours ago"
+
+      # Long running DAGs
+      - alert: LongRunningDAG
+        expr: |
+          histogram_quantile(0.95, airflow_dag_duration_seconds_bucket) > 7200
+        for: 5m
+        labels:
+          severity: warning
+          component: dag
+        annotations:
+          summary: "DAG taking too long to complete"
+          description: "DAG {{ $labels.dag_id }} 95th percentile duration is {{ $value | humanizeDuration }}"
+
+  # ============================================
+  # Task-level alerts
+  # ============================================
+  
+  - name: airflow_task_alerts
+    rules:
+      # High task failure rate
+      - alert: HighTaskFailureRate
+        expr: |
+          (
+            rate(airflow_task_failed_total[10m]) / 
+            (rate(airflow_task_failed_total[10m]) + rate(airflow_task_success_total[10m]))
+          ) > 0.2
+        for: 3m
+        labels:
+          severity: warning
+          component: task
+        annotations:
+          summary: "High task failure rate detected"
+          description: "Task {{ $labels.dag_id }}.{{ $labels.task_id }} has a failure rate of {{ $value | humanizePercentage }} over the last 10 minutes"
+
+      # Task taking too long
+      - alert: LongRunningTask
+        expr: |
+          histogram_quantile(0.90, airflow_task_duration_seconds_bucket) > 3600
+        for: 2m
+        labels:
+          severity: warning
+          component: task
+        annotations:
+          summary: "Task taking too long to complete"
+          description: "Task {{ $labels.dag_id }}.{{ $labels.task_id }} 90th percentile duration is {{ $value | humanizeDuration }}"
+
+      # High retry rate
+      - alert: HighTaskRetryRate
+        expr: |
+          rate(airflow_task_retry_total[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: task
+        annotations:
+          summary: "High task retry rate detected"
+          description: "Task {{ $labels.dag_id }}.{{ $labels.task_id }} retry rate is {{ $value }} retries per second over 15 minutes"
+
+  # ============================================
+  # Executor alerts
+  # ============================================
+  
+  - name: airflow_executor_alerts
+    rules:
+      # No available executor slots
+      - alert: NoExecutorSlots
+        expr: |
+          airflow_executor_open_slots == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: executor
+        annotations:
+          summary: "No executor slots available"
+          description: "All executor slots are occupied. Tasks may be queued indefinitely."
+
+      # High number of queued tasks
+      - alert: HighQueuedTasks
+        expr: |
+          airflow_executor_queued_tasks > 50
+        for: 5m
+        labels:
+          severity: warning
+          component: executor
+        annotations:
+          summary: "Many tasks queued in executor"
+          description: "{{ $value }} tasks are currently queued in the executor"
+
+      # Executor utilization too high
+      - alert: HighExecutorUtilization
+        expr: |
+          (
+            airflow_executor_running_tasks / 
+            (airflow_executor_open_slots + airflow_executor_running_tasks)
+          ) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: executor
+        annotations:
+          summary: "High executor utilization"
+          description: "Executor utilization is {{ $value | humanizePercentage }}"
+
+  # ============================================
+  # Scheduler alerts
+  # ============================================
+  
+  - name: airflow_scheduler_alerts
+    rules:
+      # Scheduler not heartbeating
+      - alert: SchedulerNotHeartbeating
+        expr: |
+          increase(airflow_scheduler_heartbeat_total[2m]) == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: "Scheduler not heartbeating"
+          description: "Airflow scheduler hasn't sent a heartbeat in the last 2 minutes"
+
+      # Too many DAG processing timeouts
+      - alert: DAGProcessingTimeouts
+        expr: |
+          rate(airflow_dag_processing_timeouts_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: scheduler
+        annotations:
+          summary: "DAG processing timeouts detected"
+          description: "DAG processor timeout rate is {{ $value }} per second over 10 minutes"
+
+      # Large DAG processing queue
+      - alert: LargeDAGProcessingQueue
+        expr: |
+          airflow_dag_processing_queue_size > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: scheduler
+        annotations:
+          summary: "Large DAG processing queue"
+          description: "DAG processing queue size is {{ $value }}"
+
+  # ============================================
+  # Framework-specific alerts
+  # ============================================
+  
+  - name: airflow_framework_alerts
+    rules:
+      # Poor data quality scores
+      - alert: PoorDataQuality
+        expr: |
+          airflow_framework_data_quality_score < 0.8
+        for: 1m
+        labels:
+          severity: warning
+          component: framework
+        annotations:
+          summary: "Poor data quality detected"
+          description: "Data quality score for {{ $labels.dag_id }}.{{ $labels.task_id }} is {{ $value | humanizePercentage }}"
+
+      # Critical data quality failures
+      - alert: DataQualityFailure
+        expr: |
+          increase(airflow_framework_data_quality_failed_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: framework
+        annotations:
+          summary: "Data quality check failed"
+          description: "Critical data quality check failed for {{ $labels.dag_id }}.{{ $labels.task_id }}"
+
+      # No records processed (potential data issue)
+      - alert: NoRecordsProcessed
+        expr: |
+          airflow_framework_records_processed_total == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: framework
+        annotations:
+          summary: "No records processed"
+          description: "Task {{ $labels.dag_id }}.{{ $labels.task_id }} processed 0 records"
+
+      # Pipeline duration exceeding SLA
+      - alert: PipelineExceedingSLA
+        expr: |
+          airflow_framework_pipeline_duration_seconds > 7200  # 2 hours
+        for: 1m
+        labels:
+          severity: warning
+          component: framework
+        annotations:
+          summary: "Pipeline exceeding SLA"
+          description: "Pipeline {{ $labels.dag_id }} took {{ $value | humanizeDuration }} to complete"
+
+  # ============================================
+  # Infrastructure alerts
+  # ============================================
+  
+  - name: airflow_infrastructure_alerts
+    rules:
+      # Airflow services down
+      - alert: AirflowServiceDown
+        expr: |
+          up{job=~"airflow-.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Airflow service is down"
+          description: "Airflow service {{ $labels.job }} on {{ $labels.instance }} is down"
+
+      # StatsD exporter down
+      - alert: StatsDExporterDown
+        expr: |
+          up{job="airflow-statsd"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "StatsD exporter is down"
+          description: "StatsD exporter is not responding - metrics collection may be affected"
+
+      # Database connectivity issues
+      - alert: DatabaseConnectivityIssue
+        expr: |
+          airflow_database_pool_checked_out / airflow_database_pool_size > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High database connection pool usage"
+          description: "Database connection pool usage is {{ $value | humanizePercentage }}"
+
+  # ============================================
+  # Pool alerts
+  # ============================================
+  
+  - name: airflow_pool_alerts
+    rules:
+      # Pool exhausted
+      - alert: PoolExhausted
+        expr: |
+          airflow_pool_open_slots == 0 and airflow_pool_queued_slots > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: pool
+        annotations:
+          summary: "Pool {{ $labels.pool }} is exhausted"
+          description: "Pool {{ $labels.pool }} has no open slots and {{ $value }} queued tasks"
+
+      # Pool overutilization
+      - alert: PoolOverutilized
+        expr: |
+          (
+            airflow_pool_running_slots / 
+            (airflow_pool_open_slots + airflow_pool_running_slots)
+          ) > 0.95
+        for: 10m
+        labels:
+          severity: info
+          component: pool
+        annotations:
+          summary: "Pool {{ $labels.pool }} highly utilized"
+          description: "Pool {{ $labels.pool }} utilization is {{ $value | humanizePercentage }}"

@@ -1,0 +1,302 @@
+# monitoring/statsd/airflow-mapping.yml
+# StatsD to Prometheus mapping configuration for Airflow metrics
+# Based on the tutorial pattern for proper metric conversion
+
+defaults:
+  # Configure default histogram buckets for timing metrics
+  histogram_options:
+    buckets: [.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60, 300, 600, 1800, 3600]
+  
+  # Configure summary quantiles for percentile calculations
+  summary_options:
+    quantiles:
+      - quantile: 0.5
+        error: 0.05
+      - quantile: 0.9
+        error: 0.01
+      - quantile: 0.99
+        error: 0.001
+
+mappings:
+  # ============================================
+  # DAG-level metrics
+  # ============================================
+  
+  # DAG run duration - pattern: airflow.dag.duration.{dag_id}
+  - match: "airflow.dag.duration.*"
+    name: "airflow_dag_duration_seconds"
+    help: "Duration of DAG runs in seconds"
+    labels:
+      dag_id: "$1"
+    timer_type: histogram
+
+  # DAG run success - pattern: airflow.dag_run.{dag_id}.success
+  - match: "airflow.dag_run.*.success"
+    name: "airflow_dag_run_success_total"
+    help: "Total number of successful DAG runs"
+    labels:
+      dag_id: "$1"
+
+  # DAG run failure - pattern: airflow.dag_run.{dag_id}.failed
+  - match: "airflow.dag_run.*.failed"
+    name: "airflow_dag_run_failed_total"
+    help: "Total number of failed DAG runs"
+    labels:
+      dag_id: "$1"
+
+  # DAG loading duration - pattern: airflow.dag.loading-duration.{dag_id}
+  - match: "airflow.dag.loading-duration.*"
+    name: "airflow_dag_loading_duration_seconds"
+    help: "Time taken to load DAG files in seconds"
+    labels:
+      dag_id: "$1"
+    timer_type: histogram
+
+  # ============================================
+  # Task-level metrics
+  # ============================================
+  
+  # Task instance duration - pattern: airflow.task.duration.{dag_id}.{task_id}
+  - match: "airflow.task.duration.*.*"
+    name: "airflow_task_duration_seconds"
+    help: "Duration of task instances in seconds"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+    timer_type: histogram
+
+  # Task instance success - pattern: airflow.task_instance.{dag_id}.{task_id}.success
+  - match: "airflow.task_instance.*.*.success"
+    name: "airflow_task_success_total"
+    help: "Total number of successful task instances"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Task instance failure - pattern: airflow.task_instance.{dag_id}.{task_id}.failed
+  - match: "airflow.task_instance.*.*.failed"
+    name: "airflow_task_failed_total"
+    help: "Total number of failed task instances"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Task instance retry - pattern: airflow.task_instance.{dag_id}.{task_id}.retry
+  - match: "airflow.task_instance.*.*.retry"
+    name: "airflow_task_retry_total"
+    help: "Total number of task instance retries"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Task instance start - pattern: airflow.task_instance.{dag_id}.{task_id}.start
+  - match: "airflow.task_instance.*.*.start"
+    name: "airflow_task_start_total"
+    help: "Total number of task instance starts"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # ============================================
+  # Executor metrics
+  # ============================================
+  
+  # Executor open slots - pattern: airflow.executor.open_slots
+  - match: "airflow.executor.open_slots"
+    name: "airflow_executor_open_slots"
+    help: "Number of open executor slots"
+
+  # Executor queued tasks - pattern: airflow.executor.queued_tasks
+  - match: "airflow.executor.queued_tasks"
+    name: "airflow_executor_queued_tasks"
+    help: "Number of queued tasks in executor"
+
+  # Executor running tasks - pattern: airflow.executor.running_tasks
+  - match: "airflow.executor.running_tasks"
+    name: "airflow_executor_running_tasks"
+    help: "Number of running tasks in executor"
+
+  # ============================================
+  # Scheduler metrics
+  # ============================================
+  
+  # Scheduler heartbeat - pattern: airflow.scheduler_heartbeat
+  - match: "airflow.scheduler_heartbeat"
+    name: "airflow_scheduler_heartbeat_total"
+    help: "Scheduler heartbeat count"
+
+  # DAG processing processes - pattern: airflow.dag_processing.processes
+  - match: "airflow.dag_processing.processes"
+    name: "airflow_dag_processing_processes"
+    help: "Number of DAG processing processes"
+
+  # DAG processing timeouts - pattern: airflow.dag_processing.processor_timeouts
+  - match: "airflow.dag_processing.processor_timeouts"
+    name: "airflow_dag_processing_timeouts_total"
+    help: "Number of DAG processor timeouts"
+
+  # DAG file processing queue size - pattern: airflow.dag_processing.file_path_queue_size
+  - match: "airflow.dag_processing.file_path_queue_size"
+    name: "airflow_dag_processing_queue_size"
+    help: "Size of DAG file processing queue"
+
+  # ============================================
+  # Pool metrics (if using task pools)
+  # ============================================
+  
+  # Pool open slots - pattern: airflow.pool.open_slots.{pool_name}
+  - match: "airflow.pool.open_slots.*"
+    name: "airflow_pool_open_slots"
+    help: "Number of open slots in pool"
+    labels:
+      pool: "$1"
+
+  # Pool queued slots - pattern: airflow.pool.queued_slots.{pool_name}
+  - match: "airflow.pool.queued_slots.*"
+    name: "airflow_pool_queued_slots"
+    help: "Number of queued slots in pool"
+    labels:
+      pool: "$1"
+
+  # Pool running slots - pattern: airflow.pool.running_slots.{pool_name}
+  - match: "airflow.pool.running_slots.*"
+    name: "airflow_pool_running_slots"
+    help: "Number of running slots in pool"
+    labels:
+      pool: "$1"
+
+  # ============================================
+  # Framework custom metrics
+  # ============================================
+  
+  # Framework data quality score - pattern: airflow.framework.data_quality.score.{dag_id}.{task_id}
+  - match: "airflow.framework.data_quality.score.*.*"
+    name: "airflow_framework_data_quality_score"
+    help: "Data quality scores by DAG and task"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Framework data quality failures - pattern: airflow.framework.data_quality.failed.{dag_id}.{task_id}
+  - match: "airflow.framework.data_quality.failed.*.*"
+    name: "airflow_framework_data_quality_failed_total"
+    help: "Number of failed data quality checks"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Framework records processed - pattern: airflow.framework.records_processed.{dag_id}.{task_id}
+  - match: "airflow.framework.records_processed.*.*"
+    name: "airflow_framework_records_processed_total"
+    help: "Number of records processed by task"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Framework pipeline duration - pattern: airflow.framework.pipeline_duration.{dag_id}
+  - match: "airflow.framework.pipeline_duration.*"
+    name: "airflow_framework_pipeline_duration_seconds"
+    help: "End-to-end pipeline duration"
+    labels:
+      dag_id: "$1"
+    timer_type: histogram
+
+  # Framework extraction metrics - pattern: airflow.framework.extraction.records.{dag_id}.{task_id}.{source_type}
+  - match: "airflow.framework.extraction.records.*.*.*"
+    name: "airflow_framework_extraction_records_total"
+    help: "Number of records extracted"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+      source_type: "$3"
+
+  # Framework extraction duration - pattern: airflow.framework.extraction.duration.{dag_id}.{task_id}.{source_type}
+  - match: "airflow.framework.extraction.duration.*.*.*"
+    name: "airflow_framework_extraction_duration_seconds"
+    help: "Time taken for data extraction"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+      source_type: "$3"
+    timer_type: histogram
+
+  # Framework loading metrics - pattern: airflow.framework.loading.records.{dag_id}.{task_id}.{sink_type}
+  - match: "airflow.framework.loading.records.*.*.*"
+    name: "airflow_framework_loading_records_total"
+    help: "Number of records loaded"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+      sink_type: "$3"
+
+  # Framework loading duration - pattern: airflow.framework.loading.duration.{dag_id}.{task_id}.{sink_type}
+  - match: "airflow.framework.loading.duration.*.*.*"
+    name: "airflow_framework_loading_duration_seconds"
+    help: "Time taken for data loading"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+      sink_type: "$3"
+    timer_type: histogram
+
+  # Framework task success - pattern: airflow.framework.task.framework_success.{dag_id}.{task_id}
+  - match: "airflow.framework.task.framework_success.*.*"
+    name: "airflow_framework_task_success_total"
+    help: "Framework task success count"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Framework task failure - pattern: airflow.framework.task.framework_failure.{dag_id}.{task_id}
+  - match: "airflow.framework.task.framework_failure.*.*"
+    name: "airflow_framework_task_failure_total"
+    help: "Framework task failure count"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Framework health metrics - pattern: airflow.framework.health.check
+  - match: "airflow.framework.health.check"
+    name: "airflow_framework_health_check_total"
+    help: "Framework health check count"
+
+  # Framework health status - pattern: airflow.framework.health.status
+  - match: "airflow.framework.health.status"
+    name: "airflow_framework_health_status"
+    help: "Framework health status (1=healthy, 0=unhealthy)"
+
+  # ============================================
+  # Generic catch-all patterns
+  # ============================================
+  
+  # Catch remaining airflow metrics with dots
+  - match: "airflow.*.*.*.*"
+    name: "airflow_${1}_${2}_${3}_${4}"
+    help: "Generic Airflow metric with 4 components"
+    labels:
+      component1: "$1"
+      component2: "$2"
+      component3: "$3"
+      component4: "$4"
+
+  # Catch remaining airflow metrics with 3 dots
+  - match: "airflow.*.*.*"
+    name: "airflow_${1}_${2}_${3}"
+    help: "Generic Airflow metric with 3 components"
+    labels:
+      component1: "$1"
+      component2: "$2"
+      component3: "$3"
+
+  # Catch remaining airflow metrics with 2 dots
+  - match: "airflow.*.*"
+    name: "airflow_${1}_${2}"
+    help: "Generic Airflow metric with 2 components"
+    labels:
+      component1: "$1"
+      component2: "$2"
+
+  # Catch all other airflow metrics
+  - match: "airflow.*"
+    name: "airflow_${1}"
+    help: "Generic Airflow metric: ${1}"

@@ -4,6 +4,12 @@
 # Core Airflow (should be installed by base image)
 # apache-airflow[postgres,password]==3.0.1
 
+
+# ============================================
+# 🔥 REQUIRED FOR STATSD (ADD THIS)
+# ============================================
+statsd>=4.0.1
+
 # FIXED: Use compatible paramiko version that still has DSSKey
 paramiko>=2.12.0,<3.0.0
 

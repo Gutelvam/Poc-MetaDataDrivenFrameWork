@@ -11,7 +11,7 @@ from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
-from sqlalchemy import create_engine, MetaData, Table, Column, String, Integer, DateTime, Boolean, inspect
+from sqlalchemy import create_engine, MetaData, Table, Column, String, Integer, Float, DateTime, Boolean, inspect
 from pymongo import MongoClient
 from azure.storage.blob import BlobServiceClient
 import paramiko
@@ -206,44 +206,99 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
         conn.commit()
         return total_inserted
     
+    
     def _upsert_data(self, cursor, conn, table_name: str, data: List[Dict]) -> int:
-        """Upsert data (INSERT ... ON CONFLICT)"""
+        """
+        Improved upsert with better transaction management and error handling
+        
+        Note: This function manages its own transactions for the fallback scenario.
+        The connection closing is still handled by the caller.
+        """
         if not data or not self.sink_config.upsert_keys:
             raise ValueError("Upsert requires data and upsert_keys")
-        
+
         columns = list(data[0].keys())
         columns_str = ', '.join(columns)
-        placeholders = ', '.join(['%s'] * len(columns))
-        
+
         # Build conflict clause
         conflict_keys = ', '.join(self.sink_config.upsert_keys)
         update_columns = [col for col in columns if col not in self.sink_config.upsert_keys]
         update_clause = ', '.join([f"{col} = EXCLUDED.{col}" for col in update_columns])
-        
+
         upsert_sql = f"""
             INSERT INTO {table_name} ({columns_str}) 
             VALUES %s
             ON CONFLICT ({conflict_keys}) 
             DO UPDATE SET {update_clause}
         """
-        
+
         # Prepare data
         values = []
         for record in data:
             values.append(tuple(record.get(col) for col in columns))
-        
-        # Batch upsert
+
         batch_size = self.sink_config.batch_size or 1000
-        total_upserted = 0
+
+        # First attempt: Try upsert
+        try:
+            logger.info(f"Attempting upsert operation for {len(values)} records")
+            total_upserted = 0
+            
+            for i in range(0, len(values), batch_size):
+                batch = values[i:i + batch_size]
+                execute_values(cursor, upsert_sql, batch)
+                total_upserted += len(batch)
+
+            # Commit successful upsert
+            conn.commit()
+            logger.info(f"Successfully upserted {total_upserted} records")
+            return total_upserted
+
+        except Exception as e:
+            # Check if it's a constraint error
+            if "no unique or exclusion constraint" in str(e).lower():
+                logger.warning("Upsert failed due to missing constraints, falling back to INSERT")
+                
+                # Rollback the failed upsert transaction
+                try:
+                    conn.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Rollback failed: {rollback_error}")
+                    raise
+
+                # Fallback to regular insert (NEW TRANSACTION)
+                try:
+                    insert_sql = f"INSERT INTO {table_name} ({columns_str}) VALUES %s"
+                    total_inserted = 0
+
+                    logger.info(f"Executing fallback INSERT for {len(values)} records")
+                    for i in range(0, len(values), batch_size):
+                        batch = values[i:i + batch_size]
+                        execute_values(cursor, insert_sql, batch)
+                        total_inserted += len(batch)
+
+                    # Commit successful insert
+                    conn.commit()
+                    logger.info(f"Successfully inserted {total_inserted} records via fallback")
+                    return total_inserted
+
+                except Exception as insert_error:
+                    logger.error(f"Fallback INSERT also failed: {insert_error}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass  # Ignore rollback errors at this point
+                    raise Exception(f"Both upsert and insert failed. Insert error: {insert_error}")
+
+            else:
+                # For non-constraint errors, rollback and re-raise
+                logger.error(f"Upsert failed with error: {str(e)}")
+                try:
+                    conn.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Rollback failed: {rollback_error}")
+                raise  # Re-raise the original error
         
-        for i in range(0, len(values), batch_size):
-            batch = values[i:i + batch_size]
-            execute_values(cursor, upsert_sql, batch)
-            total_upserted += len(batch)
-        
-        conn.commit()
-        return total_upserted
-    
     def _infer_schema_from_data(self, data: Union[List[Dict], pd.DataFrame]) -> str:
         """Infer PostgreSQL schema from data"""
         if isinstance(data, pd.DataFrame):
@@ -422,7 +477,7 @@ class ClickHouseSinkOperator(BaseSinkOperator):
             elif pd.api.types.is_integer_dtype(col_type):
                 columns.append(Column(col_name, Integer))
             elif pd.api.types.is_float_dtype(col_type):
-                columns.append(Column(col_name, Float64))
+                columns.append(Column(col_name, Float))
             elif pd.api.types.is_datetime64_any_dtype(col_type):
                 columns.append(Column(col_name, DateTime))
             else:

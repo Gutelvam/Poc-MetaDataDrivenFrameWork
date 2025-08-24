@@ -1681,3 +1681,293 @@
 {"timestamp":"2025-08-19T20:30:57.940272","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
 {"timestamp":"2025-08-19T20:31:28.978520","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
 {"timestamp":"2025-08-19T20:31:59.944119","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:55:40.446293","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:55:40.472036","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T20:56:12.527700","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:56:12.542101","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T20:56:42.620990","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:56:42.636006","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T20:57:13.076244","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:57:13.090264","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T20:57:43.232650","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:57:43.247374","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T20:58:13.475698","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:58:13.489162","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T20:58:43.668963","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:58:43.683108","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T20:59:14.718479","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:59:14.733343","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T20:59:45.575237","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T20:59:45.589374","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:00:16.415058","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:00:16.429122","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:00:47.282955","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:00:47.297697","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:01:18.151554","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:01:18.166227","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:01:49.004181","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:01:49.018073","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:02:19.862766","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:02:19.877349","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:02:50.687041","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:02:50.702170","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:03:21.467298","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:03:21.481589","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:03:52.365678","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:03:52.380589","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:04:23.256419","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:04:23.270965","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:04:54.205787","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:04:54.221504","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:05:25.161431","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:05:25.174877","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:05:56.127943","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:05:56.142382","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:06:27.071755","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:06:27.086264","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:06:58.125566","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:06:58.140971","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:07:29.141323","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:07:29.155093","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:08:00.078325","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:08:00.092538","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:08:31.062956","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:08:31.077129","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:09:01.149999","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:09:01.164104","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:11:54.686436","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:11:54.699846","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:12:26.159496","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:12:26.173821","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:12:56.468446","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:12:56.482380","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:13:27.042621","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:13:27.056334","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:13:57.191708","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:13:57.205221","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:14:27.347582","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:14:27.360611","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:14:58.181063","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:14:58.195179","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:15:28.592085","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:15:28.607057","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:15:59.106423","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:15:59.119859","level":"warning","event":"Enhanced monitoring not available: No module named 'monitoring.enhanced_metrics'","logger":"root"}
+{"timestamp":"2025-08-19T21:16:13.874918","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:16:44.964548","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:17:45.383470","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:18:16.747693","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:18:47.048340","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:19:17.284329","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:19:47.526115","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:20:17.950515","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:20:48.621374","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:21:19.681085","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:21:50.707075","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:22:21.757118","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:23:25.764925","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:23:57.390642","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:24:27.718713","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:24:58.421573","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:25:29.155346","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:25:59.476317","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:26:30.535347","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:27:00.650268","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:27:30.799331","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:28:00.927183","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:28:31.046755","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:29:01.201672","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:30:19.240381","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:30:51.064435","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:31:21.420437","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:31:51.748500","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:32:22.409349","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:32:52.725404","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:33:23.703394","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:33:54.662732","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:34:25.675737","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:34:56.623763","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:35:27.618475","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:35:58.651871","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:36:29.582032","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:36:59.686358","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:37:29.973686","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:38:00.195371","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:38:30.343284","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:39:00.483302","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:39:31.569404","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:40:01.698803","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:40:31.980992","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:41:02.210945","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:41:32.627117","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:42:03.326440","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:42:34.041047","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:43:04.552070","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:43:35.181596","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:44:05.756925","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:44:36.334652","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:45:06.991645","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:45:37.612059","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:46:07.960937","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:46:38.395058","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:47:08.744704","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:47:39.070356","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:48:09.363722","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:48:39.627522","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:49:09.841550","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:49:39.995929","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:50:10.281014","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:50:40.501856","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:51:11.877278","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:51:43.147796","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:52:14.472122","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:52:45.779688","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:53:16.127045","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:53:46.308247","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:55:31.408404","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:56:03.165641","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:56:33.527728","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:57:04.115937","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:57:34.823589","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:58:06.044907","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:58:37.179816","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:59:08.318013","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T21:59:39.457266","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:00:10.587199","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:00:41.734125","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:01:12.873327","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:01:44.126601","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:02:15.288081","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:02:46.531188","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:03:16.642768","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:03:46.881977","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:04:17.076078","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:04:47.309594","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:05:17.738669","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:05:48.301706","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:06:18.639560","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:06:49.014569","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:30:51.159471","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:31:22.964321","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:31:53.381607","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:32:23.756268","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:32:54.796963","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:33:25.727130","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:33:56.658974","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:34:27.578915","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:34:58.480286","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:35:29.438968","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:36:00.436336","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:36:31.454581","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:37:02.480409","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:37:33.541121","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:38:03.636711","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:38:33.861101","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:39:04.147525","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:39:34.320254","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:40:04.558653","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:40:34.789641","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:41:04.938508","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:41:35.312994","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:58:42.044025","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:59:13.820117","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T22:59:44.144902","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:00:14.678024","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:00:45.572772","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:01:16.761330","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:01:47.946020","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:02:19.112192","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:02:50.273148","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:03:21.428806","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:03:52.601182","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:04:23.887123","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:04:54.142030","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:05:24.371746","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:05:54.633032","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:06:24.818717","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:06:55.011627","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:07:25.203361","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:07:55.532716","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:08:25.743235","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:08:55.914045","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:09:26.169859","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:09:56.509487","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:10:26.809661","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:19:39.079113","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:20:10.725096","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:20:41.046956","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:21:11.597992","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:21:42.196438","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:22:13.469651","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:22:44.600632","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:23:15.774157","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:23:46.948834","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:24:18.083484","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:24:49.284575","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:25:20.523872","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:25:51.753808","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:26:22.949686","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:26:53.047303","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:28:03.750406","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:28:35.464065","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:29:05.881964","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:29:36.185666","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:30:06.523842","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:30:37.477890","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:31:08.457035","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:31:39.527659","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:32:10.525103","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:32:41.458721","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:33:12.412702","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:33:43.378975","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:34:14.382317","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:34:45.443205","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:35:15.541760","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:35:46.202766","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:36:16.889873","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:36:47.126333","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:37:17.345497","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:37:47.775019","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:38:18.105684","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:38:48.222537","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:39:18.452732","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:39:48.944292","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:40:19.095362","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:40:49.279332","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:41:19.497744","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:41:49.765205","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:42:20.088661","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:42:50.489741","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:43:21.163081","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:43:51.627807","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:44:22.194047","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:44:52.775790","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:45:23.403452","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:45:54.016780","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:46:24.533155","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:46:55.227751","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:47:25.419684","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:47:55.776293","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:48:25.959540","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:48:56.147387","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:49:26.246601","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:49:56.475012","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:50:26.705807","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:50:56.867235","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:51:27.013686","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:51:57.191506","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:52:27.457661","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:52:57.946161","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:53:28.274316","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:53:58.547129","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:54:28.884403","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:54:59.121244","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:55:29.408273","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:55:59.861134","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:56:30.165838","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:57:00.590476","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:57:30.959540","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:58:01.336032","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:58:31.709894","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:59:02.023754","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-19T23:59:32.396063","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/dag_factory.py","logger":"airflow.models.dagbag.DagBag"}

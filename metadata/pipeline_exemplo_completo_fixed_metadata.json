@@ -1,0 +1,325 @@
+{
+  "dag_id": "pipeline_exemplo_completo_fixed",
+  "created_at": "2025-08-22T19:45:33.263777",
+  "version": "1.0",
+  "config": {
+    "dag_id": "pipeline_exemplo_completo_fixed",
+    "description": "Pipeline completo com acesso correto aos dados entre tarefas",
+    "pipeline_type": "batch",
+    "schedule_interval": "0 2 * * *",
+    "start_date": "2024-01-01",
+    "catchup": false,
+    "max_active_runs": 1,
+    "tags": [
+      "exemplo",
+      "etl",
+      "completo",
+      "framework",
+      "fixed",
+      "monitored"
+    ],
+    "owner": "data-engineering",
+    "tasks": [
+      {
+        "task_id": "inicio",
+        "operator_type": "dummy",
+        "description": "In\u00edcio do pipeline",
+        "retries": 1,
+        "retry_delay": 60,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "extrair_customers",
+        "operator_type": "extract",
+        "description": "Extrai dados de clientes",
+        "source": {
+          "name": "customers_source",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "schema_name": "public",
+          "table_name": "customers",
+          "query": "SELECT \n  customer_id,\n  first_name,\n  last_name,\n  email,\n  registration_date,\n  country,\n  city,\n  age,\n  customer_segment,\n  total_orders,\n  total_spent,\n  last_order_date,\n  is_active\nFROM public.customers \nWHERE is_active = true\nAND registration_date >= (CURRENT_DATE - INTERVAL '30 days')\n"
+        },
+        "depends_on": [
+          "inicio"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "extrair_orders",
+        "operator_type": "extract",
+        "description": "Extrai dados de pedidos",
+        "source": {
+          "name": "orders_source",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "schema_name": "public",
+          "table_name": "orders",
+          "query": "SELECT \n  order_id,\n  customer_id,\n  order_date,\n  order_amount,\n  product_category,\n  payment_method,\n  order_status,\n  shipping_country,\n  discount_amount,\n  tax_amount\nFROM public.orders \nWHERE order_date >= (CURRENT_DATE - INTERVAL '30 days')\nAND order_status = 'completed'\n"
+        },
+        "depends_on": [
+          "inicio"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "qualidade_customers",
+        "operator_type": "quality_check",
+        "description": "Verifica qualidade dos dados de clientes",
+        "depends_on": [
+          "extrair_customers"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "quality_rules": [
+          {
+            "name": "customer_email_not_null",
+            "rule_type": "not_null",
+            "column": "email",
+            "threshold": 1.0,
+            "severity": "critical"
+          },
+          {
+            "name": "customer_email_unique",
+            "rule_type": "unique",
+            "column": "email",
+            "threshold": 1.0,
+            "severity": "critical"
+          },
+          {
+            "name": "customer_age_range",
+            "rule_type": "range",
+            "column": "age",
+            "parameters": {
+              "min_value": 18,
+              "max_value": 100
+            },
+            "threshold": 0.95,
+            "severity": "warning"
+          },
+          {
+            "name": "customer_email_pattern",
+            "rule_type": "pattern",
+            "column": "email",
+            "parameters": {
+              "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+            },
+            "threshold": 0.98,
+            "severity": "error"
+          }
+        ]
+      },
+      {
+        "task_id": "qualidade_orders",
+        "operator_type": "quality_check",
+        "description": "Verifica qualidade dos dados de pedidos",
+        "depends_on": [
+          "extrair_orders"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "quality_rules": [
+          {
+            "name": "order_amount_positive",
+            "rule_type": "range",
+            "column": "order_amount",
+            "parameters": {
+              "min_value": 0.01,
+              "max_value": 10000
+            },
+            "threshold": 1.0,
+            "severity": "critical"
+          },
+          {
+            "name": "order_date_not_null",
+            "rule_type": "not_null",
+            "column": "order_date",
+            "threshold": 1.0,
+            "severity": "critical"
+          }
+        ]
+      },
+      {
+        "task_id": "transformar_customer_summary_v2",
+        "operator_type": "transform",
+        "description": "Cria resumo dos clientes (usando dados originais)",
+        "depends_on": [
+          "extrair_customers",
+          "extrair_orders"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "sql_transform": "SELECT \n  c.customer_id,\n  c.first_name || ' ' || c.last_name as full_name,\n  c.email,\n  c.customer_segment,\n  c.country,\n  c.city,\n  c.age,\n  c.registration_date,\n  COALESCE(COUNT(o.order_id), 0) as orders_count,\n  COALESCE(SUM(o.order_amount), 0) as total_spent_today,\n  COALESCE(AVG(o.order_amount), 0) as avg_order_value,\n  CURRENT_DATE as processing_date,\n  CURRENT_TIMESTAMP as processed_at\nFROM extrair_customers c\nLEFT JOIN extrair_orders o ON c.customer_id = o.customer_id\nGROUP BY \n  c.customer_id, c.first_name, c.last_name, c.email,\n  c.customer_segment, c.country, c.city, c.age, c.registration_date\n"
+      },
+      {
+        "task_id": "agregar_por_categoria",
+        "operator_type": "transform",
+        "description": "Agrega vendas por categoria",
+        "depends_on": [
+          "extrair_orders"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "python_transform": "# Or even better, this comprehensive version:\ndef aggregate_by_category(datasets, **context):\n    import pandas as pd\n    from datetime import datetime\n    \n    orders = pd.DataFrame(datasets['extrair_orders'])\n    \n    if orders.empty:\n        return []\n    \n    # Convert numeric columns safely\n    for col in ['order_amount', 'discount_amount', 'tax_amount']:\n        if col in orders.columns:\n            orders[col] = pd.to_numeric(orders[col], errors='coerce').fillna(0.0)\n    \n    # Aggregation by category\n    category_summary = orders.groupby('product_category').agg({\n        'order_amount': ['sum', 'mean', 'count'],\n        'discount_amount': 'sum',\n        'tax_amount': 'sum'\n    }).round(2)\n    \n    # Flatten columns\n    category_summary.columns = ['_'.join(col).strip() for col in category_summary.columns]\n    category_summary = category_summary.reset_index()\n    \n    # SAFE context access - this is the key fix\n    processing_date = context.get('ds')\n    if not processing_date:\n        execution_date = context.get('execution_date')\n        if execution_date:\n            processing_date = execution_date.strftime('%Y-%m-%d')\n        else:\n            processing_date = datetime.now().strftime('%Y-%m-%d')\n    \n    category_summary['processing_date'] = processing_date\n    category_summary['total_categories'] = len(category_summary)\n    \n    return category_summary.to_dict('records')\n"
+      },
+      {
+        "task_id": "validar_e_limpar",
+        "operator_type": "transform",
+        "description": "Valida e limpa os dados transformados",
+        "depends_on": [
+          "transformar_customer_summary_v2"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "python_transform": "def validate_and_clean(datasets, **context):\n    import pandas as pd\n    \n    data = pd.DataFrame(datasets['transformar_customer_summary_v2'])\n    \n    if data.empty:\n        return []\n    \n    # Remover duplicatas\n    data = data.drop_duplicates(subset=['customer_id'])\n    \n    # Validar email\n    data = data[data['email'].notna()]\n    data = data[data['email'].str.contains('@', na=False)]\n    \n    # Limpar valores monet\u00e1rios\n    data['total_spent_today'] = data['total_spent_today'].fillna(0)\n    data['avg_order_value'] = data['avg_order_value'].fillna(0)\n    \n    # Validar ranges\n    data = data[data['total_spent_today'] >= 0]\n    data = data[data['total_spent_today'] <= 50000]\n    \n    return data.to_dict('records')\n"
+      },
+      {
+        "task_id": "carregar_customer_summary",
+        "operator_type": "load",
+        "description": "Carrega resumo de clientes no DW",
+        "sink": {
+          "name": "customer_summary_dw",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "write_mode": "upsert",
+          "schema_name": "public",
+          "table_name": "customer_daily_summary",
+          "auto_create_table": true,
+          "table_schema": {
+            "customer_id": "INTEGER",
+            "full_name": "VARCHAR(255)",
+            "email": "VARCHAR(255)",
+            "customer_segment": "VARCHAR(50)",
+            "country": "VARCHAR(50)",
+            "city": "VARCHAR(100)",
+            "age": "INTEGER",
+            "registration_date": "DATE",
+            "orders_count": "INTEGER",
+            "total_spent_today": "DECIMAL(12,2)",
+            "avg_order_value": "DECIMAL(10,2)",
+            "processing_date": "DATE",
+            "processed_at": "TIMESTAMP"
+          },
+          "upsert_keys": [
+            "customer_id",
+            "processing_date"
+          ],
+          "batch_size": 1000
+        },
+        "depends_on": [
+          "validar_e_limpar"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "carregar_category_summary",
+        "operator_type": "load",
+        "description": "Carrega agrega\u00e7\u00f5es por categoria",
+        "sink": {
+          "name": "category_summary_dw",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "write_mode": "append",
+          "schema_name": "public",
+          "table_name": "category_daily_summary",
+          "auto_create_table": true,
+          "batch_size": 100
+        },
+        "depends_on": [
+          "agregar_por_categoria"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "relatorio_qualidade",
+        "operator_type": "quality_check",
+        "description": "Gera relat\u00f3rio final de qualidade",
+        "depends_on": [
+          "validar_e_limpar"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "quality_rules": [
+          {
+            "name": "check_completeness",
+            "rule_type": "completeness",
+            "threshold": 0.95,
+            "severity": "warning"
+          }
+        ]
+      },
+      {
+        "task_id": "notificar_sucesso",
+        "operator_type": "custom",
+        "description": "Notifica sucesso do pipeline",
+        "depends_on": [
+          "carregar_customer_summary",
+          "carregar_category_summary",
+          "relatorio_qualidade"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "custom_function": "def notify_success(**context):\n    import logging\n    logger = logging.getLogger(__name__)\n    \n    dag_id = context['dag'].dag_id\n    execution_date = context['execution_date']\n    \n    logger.info(f\"Pipeline {dag_id} executado com sucesso em {execution_date}\")\n    \n    return {\n        \"status\": \"success\",\n        \"dag_id\": dag_id,\n        \"execution_date\": execution_date.isoformat(),\n        \"message\": \"Pipeline conclu\u00eddo com sucesso\"\n    }\n"
+      },
+      {
+        "task_id": "fim",
+        "operator_type": "dummy",
+        "description": "Fim do pipeline",
+        "depends_on": [
+          "notificar_sucesso"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      }
+    ],
+    "dependencies": [],
+    "sla": 120,
+    "retries": 2,
+    "retry_delay": 600,
+    "allow_reprocessing": true,
+    "reprocess_lookback_days": 7,
+    "global_quality_rules": [
+      {
+        "name": "check_data_freshness",
+        "rule_type": "freshness",
+        "column": "created_at",
+        "parameters": {
+          "max_age_hours": 48
+        },
+        "threshold": 1.0,
+        "severity": "warning"
+      }
+    ]
+  },
+  "validation_status": "valid",
+  "last_updated": "2025-08-22T19:45:33.263780"
+}

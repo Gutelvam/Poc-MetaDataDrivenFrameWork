@@ -1,0 +1,22 @@
+mappings:
+  - match: "airflow.dag.duration.*"
+    name: "airflow_dag_duration_seconds"
+    labels:
+      dag_id: "$1"
+      
+  - match: "airflow.dag_run.*.success"
+    name: "airflow_dag_run_success_total"
+    labels:
+      dag_id: "$1"
+      
+  - match: "airflow.task.duration.*.*"
+    name: "airflow_task_duration_seconds"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+      
+  - match: "airflow.executor.open_slots"
+    name: "airflow_executor_open_slots"
+    
+  - match: "airflow.*"
+    name: "airflow_${1}"
