@@ -1,5 +1,5 @@
 # Dockerfile customizado para Framework com Airflow 3.x
-FROM apache/airflow:latest
+FROM apache/airflow:3.0.4
 
 # Mudar para root para instalar dependências do sistema
 USER root
