@@ -50,7 +50,10 @@ class BaseSinkOperator(BaseOperator):
             
             # Ensure table exists if auto_create is enabled
             if self.sink_config.auto_create_table:
-                self.create_table_if_not_exists(data)
+                # This method may fix duplicate keys and return modified data
+                fixed_data = self.create_table_if_not_exists(data)
+                if fixed_data is not None:
+                    data = fixed_data  # Use the fixed data for loading
             
             # Load data based on write mode
             records_processed = self.load_data(data, context)
@@ -74,9 +77,32 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
     """Load data into PostgreSQL database"""
     
     def create_table_if_not_exists(self, data: Union[List[Dict], pd.DataFrame]):
-        """Create PostgreSQL table if it doesn't exist"""
+        """Create PostgreSQL table if it doesn't exist, or recreate if schema conflicts exist"""
         if not data:
             return
+        
+        # DEBUG: Check for duplicate columns before table creation
+        if isinstance(data, list) and data:
+            sample_keys = list(data[0].keys())
+            logger.info(f"🔍 DEBUG: Sample data has {len(sample_keys)} keys")
+            
+            # Check for duplicates
+            key_counts = {}
+            duplicates = []
+            for key in sample_keys:
+                key_counts[key] = key_counts.get(key, 0) + 1
+                if key_counts[key] > 1:
+                    duplicates.append(key)
+            
+            if duplicates:
+                logger.error(f"❌ DUPLICATE KEYS FOUND: {duplicates}")
+                logger.error(f"❌ Key counts: {key_counts}")
+                
+                # Try to fix duplicates by modifying the data
+                logger.info("🔧 Attempting to fix duplicates in data...")
+                data = self._fix_duplicate_keys_in_data(data)
+            else:
+                logger.info("✅ No duplicate keys found in sample data")
         
         connection = BaseHook.get_connection(self.sink_config.connection_id)
         
@@ -104,6 +130,14 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
             
             table_exists = cursor.fetchone()[0]
             
+            if table_exists:
+                # Check if we need to recreate the table due to type conflicts
+                if self._should_recreate_table_for_schema_evolution(cursor, full_table_name, data):
+                    logger.warning(f"🔄 Recreating table {full_table_name} due to schema evolution conflicts")
+                    cursor.execute(f"DROP TABLE IF EXISTS {full_table_name}")
+                    conn.commit()
+                    table_exists = False
+            
             if not table_exists:
                 # Infer schema from data
                 if self.sink_config.table_schema:
@@ -117,6 +151,9 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
                     )
                 """
                 
+                logger.info(f"🔍 CREATE TABLE SQL preview: {create_table_sql[:500]}...")
+                logger.info(f"🔍 Full columns definition: {columns_def}")
+                
                 cursor.execute(create_table_sql)
                 conn.commit()
                 logger.info(f"Created table: {full_table_name}")
@@ -124,6 +161,49 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
         finally:
             if 'conn' in locals():
                 conn.close()
+        
+        # Return potentially fixed data
+        return data
+    
+    def _should_recreate_table_for_schema_evolution(self, cursor, table_name: str, data: List[Dict]) -> bool:
+        """
+        Check if we should recreate the table due to schema evolution conflicts.
+        Returns True if table has incompatible column types for the current data.
+        """
+        try:
+            # Extract schema and table name
+            if '.' in table_name:
+                schema_name, actual_table_name = table_name.split('.', 1)
+            else:
+                schema_name = 'public'
+                actual_table_name = table_name
+            
+            # Get current table schema
+            cursor.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_schema = %s AND table_name = %s
+            """, (schema_name, actual_table_name))
+            
+            current_schema = {row[0]: row[1] for row in cursor.fetchall()}
+            
+            if not current_schema:
+                return False  # Table doesn't exist
+            
+            # Check if any column has a type that conflicts with string data
+            problematic_types = {'real', 'double precision', 'integer', 'bigint', 'numeric', 'decimal'}
+            
+            for col_name, col_type in current_schema.items():
+                if col_type.lower() in problematic_types:
+                    logger.warning(f"⚠️ Found potentially problematic column: {col_name} ({col_type})")
+                    # For now, recreate if we find any numeric types since we're using TEXT for everything
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking table schema: {str(e)}")
+            return False  # Don't recreate on error
     
     def load_data(self, data: Union[List[Dict], pd.DataFrame], context) -> int:
         """Load data into PostgreSQL"""
@@ -177,20 +257,198 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
         """Append data to table"""
         return self._insert_data(cursor, conn, table_name, data)
     
+    def _serialize_value(self, value):
+        """Serialize complex values for PostgreSQL compatibility with improved type safety"""
+        import json
+        import uuid
+        import decimal
+        import math
+        from datetime import datetime, date
+        
+        # Handle None values
+        if value is None:
+            return None
+            
+        # Handle pandas NaN values - convert to None for PostgreSQL
+        if pd.isna(value):
+            return None
+            
+        # Handle UUID objects
+        if isinstance(value, uuid.UUID):
+            return str(value)
+            
+        # Handle datetime objects
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+            
+        # Handle decimal objects
+        if isinstance(value, decimal.Decimal):
+            if math.isnan(float(value)) or math.isinf(float(value)):
+                return None  # Convert invalid decimals to NULL
+            return float(value)
+            
+        # Handle float values more carefully
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                return None  # Convert NaN/Inf to NULL instead of string
+            return value
+            
+        # Handle bytes
+        if isinstance(value, bytes):
+            try:
+                return value.decode('utf-8')
+            except UnicodeDecodeError:
+                return value.hex()
+                
+        # Handle complex data types (dict, list) - convert to JSON strings
+        if isinstance(value, (dict, list, tuple)):
+            try:
+                return json.dumps(value, default=str, ensure_ascii=False)
+            except (TypeError, ValueError):
+                return str(value)
+        
+        # Handle string values that might cause type issues
+        if isinstance(value, str):
+            # If it's obviously not meant to be a number, keep as string
+            if value.lower() in ['nan', 'null', 'none', '']:
+                return None
+            return value
+                
+        # For all other types, try to convert to string if not serializable
+        try:
+            # Test if it's already JSON serializable
+            json.dumps(value)
+            return value
+        except (TypeError, ValueError):
+            return str(value)
+    
     def _insert_data(self, cursor, conn, table_name: str, data: List[Dict]) -> int:
-        """Insert data into table"""
+        """Insert data into table with proper serialization and schema alignment"""
         if not data:
             return 0
         
-        # Get column names from first record
-        columns = list(data[0].keys())
-        columns_str = ', '.join(columns)
-        placeholders = ', '.join(['%s'] * len(columns))
+        logger.info(f"🔄 Preparing to insert {len(data)} records into {table_name}")
         
-        # Prepare data for batch insert
+        # Get column names from first record and fix duplicates immediately
+        original_columns = list(data[0].keys())
+        logger.info(f"📋 Original columns: {len(original_columns)} columns")
+        
+        # Fix duplicate column names RIGHT HERE before any PostgreSQL operations
+        seen_columns = set()
+        unique_columns = []
+        column_mapping = {}
+        
+        for col in original_columns:
+            original_col = col
+            counter = 1
+            while col in seen_columns:
+                col = f"{original_col}_{counter}"
+                counter += 1
+            
+            seen_columns.add(col)
+            unique_columns.append(col)
+            
+            if original_col != col:
+                column_mapping[original_col] = col
+                logger.info(f"🔄 Fixed duplicate column: '{original_col}' -> '{col}'")
+        
+        # CRITICAL FIX: Get actual table schema and map columns to existing table columns
+        table_column_mapping = self._get_table_column_mapping(cursor, table_name, unique_columns)
+        
+        # Apply both duplicate fixes AND table schema alignment
+        if column_mapping or table_column_mapping:
+            logger.info(f"🔧 Applying column mappings: {len(column_mapping)} duplicates + {len(table_column_mapping)} schema alignments...")
+            fixed_data = []
+            for record in data:
+                fixed_record = {}
+                for old_key, value in record.items():
+                    # First apply duplicate fix
+                    intermediate_key = column_mapping.get(old_key, old_key)
+                    # Then apply table schema alignment
+                    final_key = table_column_mapping.get(intermediate_key, intermediate_key)
+                    
+                    # Skip columns that don't exist in table (mapped to None)
+                    if final_key is not None:
+                        # Handle case where multiple columns map to same final column
+                        if final_key in fixed_record:
+                            # Merge values - prefer non-null values, or use the last one
+                            existing_value = fixed_record[final_key]
+                            if existing_value is None or (existing_value == "" and value is not None):
+                                fixed_record[final_key] = value
+                            elif value is not None and value != "" and existing_value != value:
+                                # Both have values - concatenate or choose based on type
+                                if isinstance(existing_value, str) and isinstance(value, str):
+                                    fixed_record[final_key] = f"{existing_value}; {value}"
+                                else:
+                                    fixed_record[final_key] = value  # Use the newer value
+                        else:
+                            fixed_record[final_key] = value
+                fixed_data.append(fixed_record)
+            data = fixed_data
+            
+            # Update columns list to match table schema (excluding None mappings)
+            final_columns = []
+            seen_final_columns = set()
+            
+            for col in unique_columns:
+                final_col = table_column_mapping.get(col, col)
+                if final_col is not None:  # Only include columns that exist in table
+                    # Additional check to prevent duplicates in final column list
+                    if final_col not in seen_final_columns:
+                        final_columns.append(final_col)
+                        seen_final_columns.add(final_col)
+                    else:
+                        logger.warning(f"⚠️ Skipping duplicate final column: '{final_col}' (mapped from '{col}')")
+            
+            columns = final_columns
+            logger.info(f"✅ Fixed data with {len(columns)} schema-aligned columns (filtered out unmapped columns)")
+        else:
+            columns = unique_columns
+        
+        # Final check for duplicates in columns list
+        if len(columns) != len(set(columns)):
+            logger.error(f"❌ DUPLICATE COLUMNS DETECTED IN FINAL LIST!")
+            column_counts = {}
+            duplicates = []
+            for col in columns:
+                column_counts[col] = column_counts.get(col, 0) + 1
+                if column_counts[col] > 1 and col not in duplicates:
+                    duplicates.append(col)
+            logger.error(f"❌ Duplicate columns: {duplicates}")
+            logger.error(f"❌ Column counts: {column_counts}")
+            
+            # Remove duplicates by converting to list of unique items in order
+            seen = set()
+            unique_final_columns = []
+            for col in columns:
+                if col not in seen:
+                    unique_final_columns.append(col)
+                    seen.add(col)
+            columns = unique_final_columns
+            logger.info(f"✅ Removed duplicates - final column count: {len(columns)}")
+        
+        columns_str = ', '.join(columns)
+        
+        logger.info(f"📋 Columns to insert ({len(columns)}): {columns[:10]}..." + (f" and {len(columns)-10} more" if len(columns) > 10 else ""))
+        
+        # Prepare data for batch insert with serialization
         values = []
-        for record in data:
-            values.append(tuple(record.get(col) for col in columns))
+        for i, record in enumerate(data):
+            try:
+                # Serialize each value to ensure PostgreSQL compatibility
+                serialized_values = []
+                for col in columns:
+                    raw_value = record.get(col)
+                    serialized_value = self._serialize_value(raw_value)
+                    serialized_values.append(serialized_value)
+                
+                values.append(tuple(serialized_values))
+            except Exception as e:
+                logger.error(f"❌ Failed to serialize record {i}: {e}")
+                logger.debug(f"Record data: {record}")
+                raise
+        
+        logger.info(f"✅ Successfully serialized {len(values)} records")
         
         # Batch insert
         batch_size = self.sink_config.batch_size or 1000
@@ -199,13 +457,172 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
         for i in range(0, len(values), batch_size):
             batch = values[i:i + batch_size]
             
-            insert_sql = f"INSERT INTO {table_name} ({columns_str}) VALUES %s"
-            execute_values(cursor, insert_sql, batch)
-            total_inserted += len(batch)
+            try:
+                insert_sql = f"INSERT INTO {table_name} ({columns_str}) VALUES %s"
+                execute_values(cursor, insert_sql, batch)
+                total_inserted += len(batch)
+                logger.info(f"📤 Inserted batch {i//batch_size + 1}: {len(batch)} records")
+            except Exception as e:
+                logger.error(f"❌ Failed to insert batch starting at record {i}: {e}")
+                # Log sample data for debugging
+                if batch:
+                    logger.debug(f"Sample batch data: {batch[0]}")
+                raise
         
         conn.commit()
+        logger.info(f"✅ Successfully inserted {total_inserted} total records into {table_name}")
         return total_inserted
     
+    def _get_table_column_mapping(self, cursor, table_name: str, data_columns: List[str]) -> Dict[str, str]:
+        """
+        Map data columns to existing table columns to handle schema evolution.
+        Returns mapping from data column names to actual table column names.
+        """
+        try:
+            # Extract schema and table name
+            if '.' in table_name:
+                schema_name, actual_table_name = table_name.split('.', 1)
+            else:
+                schema_name = 'public'
+                actual_table_name = table_name
+            
+            # Get actual table columns
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = %s AND table_name = %s
+                ORDER BY ordinal_position
+            """, (schema_name, actual_table_name))
+            
+            table_columns = [row[0] for row in cursor.fetchall()]
+            logger.info(f"🗄️ Table {table_name} has {len(table_columns)} columns")
+            
+            if not table_columns:
+                logger.warning(f"⚠️ No columns found for table {table_name}")
+                return {}
+            
+            # Create mapping for mismatched columns
+            column_mapping = {}
+            
+            for data_col in data_columns:
+                if data_col not in table_columns:
+                    # Try to find a matching truncated column
+                    best_match = self._find_best_column_match(data_col, table_columns)
+                    if best_match:
+                        column_mapping[data_col] = best_match
+                        logger.info(f"🔗 Mapped column: '{data_col}' -> '{best_match}'")
+                    else:
+                        logger.warning(f"❌ No matching column found for: '{data_col}' in table {table_name}")
+                        # Skip columns that don't exist in the table
+                        column_mapping[data_col] = None
+            
+            return column_mapping
+            
+        except Exception as e:
+            logger.error(f"Failed to get table column mapping: {str(e)}")
+            return {}
+    
+    def _find_best_column_match(self, data_column: str, table_columns: List[str]) -> Optional[str]:
+        """
+        Find the best matching table column for a data column.
+        Handles cases where columns were truncated during table creation.
+        """
+        # Direct match
+        if data_column in table_columns:
+            return data_column
+        
+        # For long xAPI columns, try to find the truncated version
+        if data_column.startswith('xapi_') and len(data_column) > 50:
+            # Look for columns that start with the same prefix and have similar hash/suffix pattern
+            prefix_parts = data_column.split('_')[:3]  # xapi_category_subcategory
+            prefix = '_'.join(prefix_parts)
+            suffix = data_column.split('_')[-1]  # last part
+            
+            for table_col in table_columns:
+                if (table_col.startswith(prefix) and 
+                    table_col.endswith(suffix) and
+                    len(table_col) <= 60):
+                    return table_col
+        
+        # Try partial matching for other cases
+        # Look for the longest common prefix
+        best_match = None
+        best_score = 0
+        
+        for table_col in table_columns:
+            # Calculate similarity score
+            if data_column.startswith(table_col[:20]) or table_col.startswith(data_column[:20]):
+                # Common prefix match
+                common_len = 0
+                for i in range(min(len(data_column), len(table_col))):
+                    if data_column[i] == table_col[i]:
+                        common_len += 1
+                    else:
+                        break
+                
+                if common_len > best_score and common_len >= 10:  # At least 10 chars match
+                    best_score = common_len
+                    best_match = table_col
+        
+        return best_match
+    
+    def _clean_column_name_for_postgres(self, col_name: str) -> str:
+        """
+        Clean column names consistently for PostgreSQL compatibility.
+        Uses same logic as dynamic JSON parser for consistency.
+        """
+        import re
+        import hashlib
+        
+        clean_key = str(col_name)
+        
+        # Remove or replace invalid characters
+        clean_key = re.sub(r'[^\w\s]', '_', clean_key)  # Replace special chars with underscore
+        clean_key = re.sub(r'\s+', '_', clean_key)      # Replace spaces with underscore
+        clean_key = re.sub(r'_+', '_', clean_key)       # Replace multiple underscores with single
+        clean_key = clean_key.strip('_')                # Remove leading/trailing underscores
+        
+        # Ensure it starts with a letter or underscore
+        if clean_key and clean_key[0].isdigit():
+            clean_key = f"field_{clean_key}"
+        
+        # Handle PostgreSQL 63-char identifier limit while preserving meaning
+        if len(clean_key) > 60:  # Leave room for duplicate suffixes
+            # For xAPI columns, preserve the most meaningful parts
+            if clean_key.startswith('xapi_'):
+                parts = clean_key.split('_')
+                
+                if len(parts) >= 4:
+                    # Keep first 3 parts (xapi_category_subcategory)
+                    prefix = '_'.join(parts[:3])
+                    # Keep last 1-2 parts (the most specific)
+                    suffix = '_'.join(parts[-2:]) if len(parts) > 4 else parts[-1]
+                    # Create hash of the middle part
+                    middle_part = '_'.join(parts[3:-2]) if len(parts) > 5 else '_'.join(parts[3:-1])
+                    hash_part = hashlib.md5(middle_part.encode()).hexdigest()[:6]
+                    
+                    clean_key = f"{prefix}_{hash_part}_{suffix}"
+                    
+                    # If still too long, shorten the suffix
+                    if len(clean_key) > 60:
+                        suffix = parts[-1]  # Just the last part
+                        clean_key = f"{prefix}_{hash_part}_{suffix}"
+                else:
+                    # Fallback for shorter xAPI columns
+                    hash_part = hashlib.md5(clean_key.encode()).hexdigest()[:8]
+                    clean_key = f"{parts[0]}_{parts[1]}_{hash_part}_{parts[-1]}"[:60]
+            else:
+                # For non-xAPI columns, use simpler approach
+                hash_part = hashlib.md5(clean_key.encode()).hexdigest()[:8]
+                clean_key = f"col_{hash_part}_{clean_key.split('_')[-1]}"[:60]
+        elif len(clean_key) > 50:
+            clean_key = clean_key[:50]
+        
+        # Handle empty keys
+        if not clean_key:
+            clean_key = "unnamed_field"
+        
+        return clean_key
     
     def _upsert_data(self, cursor, conn, table_name: str, data: List[Dict]) -> int:
         """
@@ -232,10 +649,22 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
             DO UPDATE SET {update_clause}
         """
 
-        # Prepare data
+        # Prepare data with serialization
         values = []
-        for record in data:
-            values.append(tuple(record.get(col) for col in columns))
+        for i, record in enumerate(data):
+            try:
+                # Serialize each value to ensure PostgreSQL compatibility
+                serialized_values = []
+                for col in columns:
+                    raw_value = record.get(col)
+                    serialized_value = self._serialize_value(raw_value)
+                    serialized_values.append(serialized_value)
+                
+                values.append(tuple(serialized_values))
+            except Exception as e:
+                logger.error(f"❌ Failed to serialize upsert record {i}: {e}")
+                logger.debug(f"Record data: {record}")
+                raise
 
         batch_size = self.sink_config.batch_size or 1000
 
@@ -300,30 +729,127 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
                 raise  # Re-raise the original error
         
     def _infer_schema_from_data(self, data: Union[List[Dict], pd.DataFrame]) -> str:
-        """Infer PostgreSQL schema from data"""
+        """Infer PostgreSQL schema from data with consistent column naming"""
         if isinstance(data, pd.DataFrame):
             sample = data.head(1).to_dict('records')[0]
         else:
             sample = data[0] if data else {}
         
+        # Handle duplicate column names by adding incremental suffixes
         columns = []
+        seen_columns = set()
+        
+        logger.info(f"🔍 Schema inference for {len(sample)} sample columns")
+        
         for col_name, value in sample.items():
-            if isinstance(value, bool):
-                col_type = "BOOLEAN"
-            elif isinstance(value, int):
-                col_type = "INTEGER"
-            elif isinstance(value, float):
-                col_type = "REAL"
-            elif isinstance(value, datetime):
-                col_type = "TIMESTAMP"
-            elif isinstance(value, (list, dict)):
-                col_type = "JSONB"
-            else:
-                col_type = "TEXT"
+            # Use the same column cleaning logic as dynamic JSON parser
+            original_col_name = col_name
+            col_name = self._clean_column_name_for_postgres(col_name)
+            
+            if original_col_name != col_name:
+                logger.info(f"🔧 Cleaned column name: '{original_col_name}' -> '{col_name}'")
+            
+            # Create unique column name
+            counter = 1
+            base_col_name = col_name
+            while col_name in seen_columns:
+                col_name = f"{base_col_name}_{counter}"
+                counter += 1
+                logger.info(f"🔄 Schema inference renamed duplicate: '{base_col_name}' -> '{col_name}'")
+            
+            seen_columns.add(col_name)
+            
+            # Improved type inference - sample more data to make better decisions
+            col_type = self._infer_column_type(col_name, value, sample)
             
             columns.append(f"{col_name} {col_type}")
         
-        return ', '.join(columns)
+        # Final safety check - ensure no duplicate column definitions
+        final_columns = []
+        seen_definitions = set()
+        
+        for col_def in columns:
+            col_name = col_def.split()[0]  # Get column name before type
+            counter = 1
+            original_def = col_def
+            
+            while col_def in seen_definitions or col_name in [c.split()[0] for c in seen_definitions]:
+                # Extract type part
+                parts = original_def.split()
+                col_type = ' '.join(parts[1:])
+                col_name = f"{parts[0]}_{counter}"
+                col_def = f"{col_name} {col_type}"
+                counter += 1
+                
+            seen_definitions.add(col_def)
+            final_columns.append(col_def)
+            
+        result = ', '.join(final_columns)
+        logger.info(f"✅ Final schema with {len(final_columns)} unique columns")
+        return result
+    
+    def _infer_column_type(self, col_name: str, sample_value: Any, full_sample: Dict[str, Any]) -> str:
+        """
+        Simplified column type inference - treating everything as TEXT for now to avoid type conflicts
+        """
+        # TEMPORARY FIX: Use TEXT for everything to avoid type conversion issues
+        # This ensures schema evolution works without data type conflicts
+        return "TEXT"
+        
+        # Original logic commented out for future use:
+        # if sample_value is None or pd.isna(sample_value):
+        #     return "TEXT"
+        # 
+        # if isinstance(sample_value, bool):
+        #     return "BOOLEAN"
+        # elif isinstance(sample_value, int):
+        #     if -2147483648 <= sample_value <= 2147483647:
+        #         return "INTEGER"
+        #     else:
+        #         return "BIGINT"
+        # elif isinstance(sample_value, float):
+        #     if pd.isna(sample_value) or sample_value in [float('inf'), float('-inf')]:
+        #         return "TEXT"
+        #     return "REAL"
+        # elif isinstance(sample_value, datetime):
+        #     return "TIMESTAMP"
+        # elif isinstance(sample_value, (list, dict)):
+        #     return "JSONB"
+        # else:
+        #     return "TEXT"
+    
+    def _is_string_that_looks_numeric_but_isnt(self, value: str) -> bool:
+        """
+        Detect strings that might look numeric but should be treated as text
+        """
+        if not isinstance(value, str):
+            return False
+            
+        # Common patterns that look numeric but are actually identifiers/versions
+        patterns_that_are_text = [
+            '@',      # version strings like "package@1.2.3"
+            '-',      # identifiers like "event-routing-backends" 
+            '.',      # version numbers like "9.3.5"
+            ':',      # time-like strings or ratios
+            '/',      # paths or fractions
+            '#',      # hex colors or IDs
+            '%'       # percentages as strings
+        ]
+        
+        # If it contains any of these patterns, treat as text
+        for pattern in patterns_that_are_text:
+            if pattern in value:
+                return True
+                
+        # If it's longer than typical numeric strings, probably text
+        if len(value) > 20:
+            return True
+            
+        # Check if it looks like a UUID, ID, or other identifier
+        if len(value) > 10 and any(c.isalpha() for c in value):
+            return True
+            
+        return False
     
     def _build_columns_definition(self, schema: Dict[str, str]) -> str:
         """Build columns definition from provided schema"""
@@ -331,6 +857,44 @@ class PostgreSQLSinkOperator(BaseSinkOperator):
         for col_name, col_type in schema.items():
             columns.append(f"{col_name} {col_type}")
         return ', '.join(columns)
+    
+    def _fix_duplicate_keys_in_data(self, data: List[Dict]) -> List[Dict]:
+        """Fix duplicate keys in data by renaming them"""
+        if not data:
+            return data
+        
+        # Get all unique keys from first record
+        sample_keys = list(data[0].keys())
+        seen_keys = set()
+        key_mapping = {}
+        
+        # Create mapping for duplicate keys
+        for key in sample_keys:
+            original_key = key
+            counter = 1
+            while key in seen_keys:
+                key = f"{original_key}_{counter}"
+                counter += 1
+            
+            seen_keys.add(key)
+            if original_key != key:
+                key_mapping[original_key] = key
+                logger.info(f"🔄 Mapped duplicate key: '{original_key}' -> '{key}'")
+        
+        # Apply mapping to all records
+        if key_mapping:
+            fixed_data = []
+            for record in data:
+                fixed_record = {}
+                for original_key, value in record.items():
+                    new_key = key_mapping.get(original_key, original_key)
+                    fixed_record[new_key] = value
+                fixed_data.append(fixed_record)
+            
+            logger.info(f"✅ Fixed duplicate keys in {len(fixed_data)} records")
+            return fixed_data
+        
+        return data
 
 class MongoDBSinkOperator(BaseSinkOperator):
     """Load data into MongoDB"""
@@ -389,7 +953,7 @@ class MongoDBSinkOperator(BaseSinkOperator):
             client.close()
 
 class ClickHouseSinkOperator(BaseSinkOperator):
-    """Load data into ClickHouse using clickhouse-sqlalchemy"""
+    """Load data into ClickHouse using clickhouse-connect for better external connection support"""
     
     def create_table_if_not_exists(self, data: Union[List[Dict], pd.DataFrame]):
         """Create ClickHouse table if it doesn't exist"""
@@ -401,32 +965,82 @@ class ClickHouseSinkOperator(BaseSinkOperator):
         else:
             df = data
             
+        try:
+            import clickhouse_connect
+        except ImportError:
+            raise ImportError("clickhouse-connect is required for ClickHouse sink operations. Install with: pip install clickhouse-connect")
+            
         connection = BaseHook.get_connection(self.sink_config.connection_id)
         
-        # Build SQLAlchemy connection string
-        conn_string = f"clickhouse+native://{connection.login}:{connection.password}@{connection.host}:{connection.port or 9000}/{connection.schema or 'default'}"
-        engine = create_engine(conn_string)
-        
         try:
-            inspector = inspect(engine)
-            table_exists = inspector.has_table(self.sink_config.table_name, schema=self.sink_config.schema_name)
+            # Extract connection parameters from Airflow connection
+            host = connection.host
+            port = connection.port or 8123  # Default HTTP port
+            username = connection.login or 'default'
+            password = connection.password or ''
+            database = connection.schema or 'default'
+            
+            # Parse extra connection parameters if provided
+            extra_params = {}
+            if hasattr(connection, 'extra_dejson') and connection.extra_dejson:
+                extra_params = connection.extra_dejson
+            
+            # Create ClickHouse client
+            client = clickhouse_connect.get_client(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                database=database,
+                secure=extra_params.get('secure', False),
+                verify=extra_params.get('verify', True),
+                connect_timeout=extra_params.get('connect_timeout', 10),
+                send_receive_timeout=extra_params.get('send_receive_timeout', 300),
+                compress=extra_params.get('compress', True)
+            )
+            
+            # Check if table exists
+            full_table_name = f"{self.sink_config.schema_name}.{self.sink_config.table_name}" if self.sink_config.schema_name else self.sink_config.table_name
+            
+            check_query = f"EXISTS TABLE {full_table_name}"
+            result = client.query(check_query)
+            table_exists = result.first_row[0] if result.first_row else False
             
             if not table_exists:
-                # Infer schema from DataFrame if not provided
+                # Build CREATE TABLE statement
                 if self.sink_config.table_schema:
-                    columns_def = self.sink_config.table_schema
+                    columns_def = self._build_clickhouse_columns(self.sink_config.table_schema)
                 else:
-                    columns_def = self._infer_sqlalchemy_schema(df)
-                    
-                # Create a SQLAlchemy Table object
-                metadata = MetaData()
-                table = Table(self.sink_config.table_name, metadata, *columns_def, schema=self.sink_config.schema_name)
+                    columns_def = self._infer_clickhouse_schema(df)
                 
-                # Execute create table
-                metadata.create_all(engine)
-                logger.info(f"Created ClickHouse table: {self.sink_config.table_name}")
+                # Determine engine based on whether upserts will be used
+                # Pass the DataFrame to validate ORDER BY columns
+                engine_config = self._get_table_engine_config(df)
+                
+                create_table_sql = f"""
+                    CREATE TABLE {full_table_name} (
+                        {columns_def}
+                    ) {engine_config}
+                """
+                
+                logger.info(f"🔨 Creating ClickHouse table with SQL: {create_table_sql[:500]}...")
+                client.command(create_table_sql)
+                logger.info(f"✅ Created ClickHouse table: {full_table_name} with engine: {engine_config}")
+            else:
+                # Table exists - check if it needs to be recreated with nullable columns
+                if self._needs_nullable_recreation(client, full_table_name, df):
+                    logger.warning(f"⚠️ Table {full_table_name} exists with non-nullable columns, recreating with nullable schema")
+                    self._recreate_table_with_nullable_schema(client, full_table_name, df)
+                else:
+                    # Standard schema evolution for missing columns
+                    self._handle_clickhouse_schema_evolution(client, full_table_name, df)
         finally:
-            engine.dispose()
+            try:
+                if 'client' in locals():
+                    client.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing ClickHouse connection: {close_error}")
+                
     
     def load_data(self, data: Union[List[Dict], pd.DataFrame], context) -> int:
         """Load data into ClickHouse"""
@@ -438,51 +1052,551 @@ class ClickHouseSinkOperator(BaseSinkOperator):
         if df.empty:
             return 0
             
+        try:
+            import clickhouse_connect
+        except ImportError:
+            raise ImportError("clickhouse-connect is required for ClickHouse sink operations. Install with: pip install clickhouse-connect")
+            
         connection = BaseHook.get_connection(self.sink_config.connection_id)
         
-        conn_string = f"clickhouse+native://{connection.login}:{connection.password}@{connection.host}:{connection.port or 9000}/{connection.schema or 'default'}"
-        engine = create_engine(conn_string)
-        
         try:
+            # Extract connection parameters from Airflow connection
+            host = connection.host
+            port = connection.port or 8123  # Default HTTP port
+            username = connection.login or 'default'
+            password = connection.password or ''
+            database = connection.schema or 'default'
+            
+            # Parse extra connection parameters if provided
+            extra_params = {}
+            if hasattr(connection, 'extra_dejson') and connection.extra_dejson:
+                extra_params = connection.extra_dejson
+            
+            # Create ClickHouse client
+            client = clickhouse_connect.get_client(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                database=database,
+                secure=extra_params.get('secure', False),
+                verify=extra_params.get('verify', True),
+                connect_timeout=extra_params.get('connect_timeout', 10),
+                send_receive_timeout=extra_params.get('send_receive_timeout', 300),
+                compress=extra_params.get('compress', True)
+            )
+            
+            logger.info(f"Connected to ClickHouse at {host}:{port}, database: {database}")
+            
+            full_table_name = f"{self.sink_config.schema_name}.{self.sink_config.table_name}" if self.sink_config.schema_name else self.sink_config.table_name
+            
             if self.sink_config.write_mode == WriteMode.OVERWRITE:
-                df.to_sql(
-                    self.sink_config.table_name, 
-                    con=engine, 
-                    if_exists='replace', 
-                    index=False,
-                    schema=self.sink_config.schema_name
-                )
+                # Truncate table first
+                truncate_sql = f"TRUNCATE TABLE {full_table_name}"
+                client.command(truncate_sql)
+                logger.info(f"Truncated table {full_table_name}")
+                
+                # Standard insert for overwrite
+                return self._insert_data(client, full_table_name, df)
+                
             elif self.sink_config.write_mode == WriteMode.APPEND:
-                df.to_sql(
-                    self.sink_config.table_name, 
-                    con=engine, 
-                    if_exists='append', 
-                    index=False,
-                    schema=self.sink_config.schema_name
-                )
+                # Standard insert for append
+                return self._insert_data(client, full_table_name, df)
+                
+            elif self.sink_config.write_mode == WriteMode.UPSERT:
+                # ClickHouse upsert using MERGE operation
+                return self._upsert_data(client, full_table_name, df)
+                
             else:
                 raise ValueError(f"Unsupported write mode: {self.sink_config.write_mode}")
-            
-            return len(df)
-        
+                
+        except Exception as e:
+            logger.error(f"ClickHouse data loading failed: {str(e)}")
+            raise
         finally:
-            engine.dispose()
+            try:
+                if 'client' in locals():
+                    client.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing ClickHouse connection: {close_error}")
+                
     
-    def _infer_sqlalchemy_schema(self, df: pd.DataFrame) -> List[Column]:
-        """Infer SQLAlchemy schema from a DataFrame"""
+    def _insert_data(self, client, full_table_name: str, df: pd.DataFrame) -> int:
+        """Standard data insertion for ClickHouse with schema alignment"""
+        # Get existing table columns to ensure we only insert matching columns
+        try:
+            describe_query = f"DESCRIBE TABLE {full_table_name}"
+            result = client.query(describe_query)
+            existing_columns = {row[0] for row in result.result_rows}
+            
+            # Filter DataFrame to only include columns that exist in the table
+            columns_to_insert = [col for col in df.columns if col in existing_columns]
+            missing_columns = [col for col in df.columns if col not in existing_columns]
+            
+            if missing_columns:
+                logger.warning(f"⚠️ Skipping {len(missing_columns)} columns not in table: {missing_columns[:5]}...")
+                logger.info(f"📝 You may want to run schema evolution first to add these columns")
+            
+            # Filter the DataFrame to only include existing columns
+            df_filtered = df[columns_to_insert]
+            
+            logger.info(f"📊 Inserting {len(df_filtered)} rows with {len(columns_to_insert)} columns into ClickHouse")
+            
+            # Check if deduplication is enabled (this could prevent duplicate inserts)
+            try:
+                dedup_query = "SELECT value FROM system.settings WHERE name = 'insert_deduplicate'"
+                result = client.query(dedup_query)
+                dedup_setting = result.first_row[0] if result.first_row else "unknown"
+                logger.info(f"🔍 ClickHouse insert_deduplicate setting: {dedup_setting}")
+                
+                if dedup_setting == '1':
+                    logger.warning("⚠️ ClickHouse deduplication is ENABLED - duplicate data may not be inserted")
+                    logger.info("💡 To disable: SET insert_deduplicate = 0")
+            except Exception as dedup_e:
+                logger.debug(f"Could not check deduplication setting: {str(dedup_e)}")
+            
+        except Exception as e:
+            logger.warning(f"Could not filter columns, using all: {str(e)}")
+            df_filtered = df
+        
+        # Convert DataFrame to list of lists for ClickHouse insertion
+        data_to_insert = df_filtered.values.tolist()
+        column_names = df_filtered.columns.tolist()
+        
+        # Insert data in batches
+        batch_size = self.sink_config.batch_size or 10000
+        total_inserted = 0
+        
+        for i in range(0, len(data_to_insert), batch_size):
+            batch = data_to_insert[i:i + batch_size]
+            
+            try:
+                logger.debug(f"🔄 Inserting batch {i//batch_size + 1} with {len(batch)} rows, columns: {column_names[:5]}...")
+                
+                client.insert(
+                    table=full_table_name,
+                    data=batch,
+                    column_names=column_names
+                )
+                total_inserted += len(batch)
+                logger.debug(f"✅ Successfully inserted batch {i//batch_size + 1} with {len(batch)} rows")
+                
+            except Exception as e:
+                logger.error(f"❌ Failed to insert batch {i//batch_size + 1}: {str(e)}")
+                logger.error(f"🔍 Batch data sample: {batch[0] if batch else 'empty'}")
+                logger.error(f"🔍 Column names: {column_names}")
+                # Try to continue with other batches
+                continue
+            
+            if len(data_to_insert) > batch_size:
+                logger.info(f"Inserted batch {i//batch_size + 1}: {len(batch)} rows")
+        
+        # Verify the actual count in the table after insertion
+        try:
+            count_query = f"SELECT COUNT(*) FROM {full_table_name}"
+            result = client.query(count_query)
+            actual_count = result.first_row[0] if result.first_row else 0
+            logger.info(f"✅ Successfully inserted {total_inserted} rows into ClickHouse table {full_table_name}")
+            logger.info(f"📊 Table now contains {actual_count} total rows")
+            
+            if total_inserted > 0 and actual_count == 0:
+                logger.error("❌ Data was not actually inserted - check ClickHouse settings or constraints")
+            
+        except Exception as e:
+            logger.warning(f"Could not verify row count: {str(e)}")
+            
+        return total_inserted
+    
+    def _upsert_data(self, client, full_table_name: str, df: pd.DataFrame) -> int:
+        """ClickHouse upsert using MERGE operations or ReplacingMergeTree approach"""
+        if not self.sink_config.upsert_keys:
+            raise ValueError("ClickHouse upsert requires upsert_keys to be specified")
+        
+        # Check if table uses ReplacingMergeTree engine
+        engine_query = f"""
+        SELECT engine 
+        FROM system.tables 
+        WHERE database = splitByChar('.', '{full_table_name}')[1] 
+        AND name = splitByChar('.', '{full_table_name}')[2]
+        """
+        
+        try:
+            result = client.query(engine_query)
+            engine = result.first_row[0] if result.first_row else None
+            
+            if engine and 'ReplacingMergeTree' in engine:
+                logger.info("Table uses ReplacingMergeTree engine, using direct insert for upsert")
+                return self._insert_data(client, full_table_name, df)
+            else:
+                logger.info("Table uses standard engine, using MERGE-based upsert")
+                return self._merge_upsert_data(client, full_table_name, df)
+                
+        except Exception as e:
+            logger.warning(f"Could not determine table engine, falling back to MERGE-based upsert: {e}")
+            return self._merge_upsert_data(client, full_table_name, df)
+    
+    def _merge_upsert_data(self, client, full_table_name: str, df: pd.DataFrame) -> int:
+        """ClickHouse MERGE-based upsert implementation"""
+        temp_table_name = f"{full_table_name}_temp_{int(pd.Timestamp.now().timestamp())}"
+        
+        try:
+            # Create temporary table with same structure
+            create_temp_query = f"""
+            CREATE TABLE {temp_table_name} AS {full_table_name}
+            """
+            client.command(create_temp_query)
+            logger.info(f"Created temporary table: {temp_table_name}")
+            
+            # Insert new data into temporary table
+            temp_inserted = self._insert_data(client, temp_table_name, df)
+            
+            # Get all columns for MERGE operation
+            columns = df.columns.tolist()
+            upsert_keys = self.sink_config.upsert_keys
+            update_columns = [col for col in columns if col not in upsert_keys]
+            
+            # Build MERGE statement
+            # ClickHouse MERGE syntax (available in newer versions)
+            merge_conditions = " AND ".join([f"target.{key} = source.{key}" for key in upsert_keys])
+            
+            if update_columns:
+                update_assignments = ", ".join([f"{col} = source.{col}" for col in update_columns])
+                merge_query = f"""
+                ALTER TABLE {full_table_name} 
+                UPDATE {update_assignments}
+                WHERE ({", ".join(upsert_keys)}) IN (
+                    SELECT {", ".join(upsert_keys)} FROM {temp_table_name}
+                )
+                """
+                
+                # Execute update for existing records
+                client.command(merge_query)
+                logger.info("Updated existing records")
+            
+            # Insert new records that don't exist
+            insert_new_query = f"""
+            INSERT INTO {full_table_name}
+            SELECT * FROM {temp_table_name}
+            WHERE ({", ".join(upsert_keys)}) NOT IN (
+                SELECT {", ".join(upsert_keys)} FROM {full_table_name}
+            )
+            """
+            
+            client.command(insert_new_query)
+            logger.info("Inserted new records")
+            
+            return temp_inserted
+            
+        except Exception as e:
+            logger.error(f"MERGE-based upsert failed: {e}")
+            # Fallback to simple insert if MERGE fails
+            logger.info("Falling back to simple insert")
+            return self._insert_data(client, full_table_name, df)
+            
+        finally:
+            # Clean up temporary table
+            try:
+                client.command(f"DROP TABLE IF EXISTS {temp_table_name}")
+                logger.info(f"Dropped temporary table: {temp_table_name}")
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to cleanup temporary table: {cleanup_error}")
+    
+    def _validate_order_by_columns(self, order_by: str, df: pd.DataFrame) -> str:
+        """
+        Validate that ORDER BY columns exist in the DataFrame.
+        Falls back to tuple() if columns don't exist.
+        """
+        if not order_by or order_by == 'tuple()':
+            return 'tuple()'
+        
+        # Extract column names from order_by string
+        # Remove parentheses if present
+        clean_order_by = order_by.strip('()')
+        
+        # Split by comma and clean column names
+        requested_columns = [col.strip() for col in clean_order_by.split(',')]
+        
+        # Check which columns actually exist in the DataFrame
+        existing_columns = []
+        for col in requested_columns:
+            if col in df.columns:
+                existing_columns.append(col)
+            else:
+                logger.warning(f"⚠️ ORDER BY column '{col}' not found in data, skipping")
+        
+        # Build the ORDER BY clause
+        if existing_columns:
+            if len(existing_columns) == 1:
+                return f"({existing_columns[0]})"
+            else:
+                return f"({', '.join(existing_columns)})"
+        else:
+            logger.warning("⚠️ No ORDER BY columns found in data, using tuple()")
+            return 'tuple()'
+    
+    def _infer_clickhouse_schema(self, df: pd.DataFrame) -> str:
+        """Infer ClickHouse schema from pandas DataFrame with nullable types for safety"""
         columns = []
         for col_name, col_type in zip(df.columns, df.dtypes):
+            # Check if column has any NULL values
+            has_nulls = df[col_name].isna().any()
+            
+            # Determine base type
             if pd.api.types.is_bool_dtype(col_type):
-                columns.append(Column(col_name, Boolean))
+                ch_type = "UInt8"  # ClickHouse doesn't have native boolean
             elif pd.api.types.is_integer_dtype(col_type):
-                columns.append(Column(col_name, Integer))
+                ch_type = "Int64"
             elif pd.api.types.is_float_dtype(col_type):
-                columns.append(Column(col_name, Float))
+                ch_type = "Float64"
             elif pd.api.types.is_datetime64_any_dtype(col_type):
-                columns.append(Column(col_name, DateTime))
+                ch_type = "DateTime"
             else:
-                columns.append(Column(col_name, String))
-        return columns
+                ch_type = "String"
+            
+            # For dynamic schemas with potential NULLs, use Nullable types
+            # This is safer for evolving schemas where NULLs might appear later
+            # Always use Nullable for dynamic JSON schemas to prevent NULL insertion errors
+            ch_type = f"Nullable({ch_type})"
+            
+            columns.append(f"`{col_name}` {ch_type}")
+        
+        return ', '.join(columns)
+    
+    def _build_clickhouse_columns(self, schema: Dict[str, str]) -> str:
+        """Build ClickHouse columns definition from provided schema"""
+        columns = []
+        for col_name, col_type in schema.items():
+            columns.append(f"`{col_name}` {col_type}")
+        return ', '.join(columns)
+    
+    def _handle_clickhouse_schema_evolution(self, client, table_name: str, df: pd.DataFrame):
+        """
+        Handle schema evolution for ClickHouse tables.
+        Adds missing columns to the existing table.
+        """
+        try:
+            # Get existing table columns
+            describe_query = f"DESCRIBE TABLE {table_name}"
+            result = client.query(describe_query)
+            existing_columns = {row[0]: row[1] for row in result.result_rows}
+            
+            logger.info(f"🔍 Existing ClickHouse table has {len(existing_columns)} columns")
+            
+            # Get columns from the DataFrame
+            data_columns = df.columns.tolist()
+            
+            # Find missing columns
+            missing_columns = []
+            for col in data_columns:
+                if col not in existing_columns:
+                    missing_columns.append(col)
+            
+            if missing_columns:
+                logger.warning(f"⚠️ Found {len(missing_columns)} new columns that need to be added to ClickHouse table")
+                logger.info(f"📝 Missing columns: {missing_columns[:10]}..." + (f" and {len(missing_columns)-10} more" if len(missing_columns) > 10 else ""))
+                
+                # Add each missing column
+                for col_name in missing_columns:
+                    # Check if column has any NULL values
+                    has_nulls = df[col_name].isna().any() if col_name in df.columns else True
+                    
+                    # Infer data type from the DataFrame
+                    sample_value = df[col_name].dropna().iloc[0] if not df[col_name].dropna().empty else None
+                    
+                    # Determine ClickHouse data type - ALWAYS use Nullable for safety with dynamic schemas
+                    if sample_value is None or pd.isna(sample_value):
+                        col_type = "Nullable(String)"  # Default to nullable string for unknown types
+                    elif isinstance(sample_value, bool):
+                        col_type = "Nullable(UInt8)"  # Always nullable for dynamic schemas
+                    elif isinstance(sample_value, int):
+                        col_type = "Nullable(Int64)"  # Always nullable for dynamic schemas
+                    elif isinstance(sample_value, float):
+                        col_type = "Nullable(Float64)"  # Always nullable for dynamic schemas
+                    elif isinstance(sample_value, (list, dict)):
+                        col_type = "Nullable(String)"  # JSON stored as nullable string
+                    else:
+                        # Default to Nullable(String) for safety with dynamic schemas
+                        col_type = "Nullable(String)"
+                    
+                    # ALTER TABLE ADD COLUMN
+                    alter_query = f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS `{col_name}` {col_type}"
+                    
+                    try:
+                        client.command(alter_query)
+                        logger.info(f"✅ Added column '{col_name}' ({col_type}) to ClickHouse table")
+                    except Exception as e:
+                        if "already exists" in str(e).lower():
+                            logger.info(f"ℹ️ Column '{col_name}' already exists (race condition)")
+                        else:
+                            logger.error(f"❌ Failed to add column '{col_name}': {str(e)}")
+                            # Try with Nullable(String) type as fallback
+                            try:
+                                alter_query_fallback = f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS `{col_name}` Nullable(String)"
+                                client.command(alter_query_fallback)
+                                logger.info(f"✅ Added column '{col_name}' as Nullable(String) (fallback)")
+                            except Exception as fallback_error:
+                                logger.error(f"❌ Fallback also failed: {str(fallback_error)}")
+                
+                logger.info(f"✅ Schema evolution complete - added {len(missing_columns)} new columns")
+            else:
+                logger.info("✅ No schema changes needed - all columns exist in ClickHouse table")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to handle schema evolution: {str(e)}")
+            # Don't fail the entire operation - try to proceed with insert
+            logger.warning("⚠️ Proceeding with insert despite schema evolution issues")
+    
+    def _needs_nullable_recreation(self, client, table_name: str, df: pd.DataFrame) -> bool:
+        """
+        Check if table needs to be recreated because it has non-nullable String columns
+        that would fail with NULL values from dynamic JSON parsing
+        """
+        try:
+            # Get existing table columns and their types
+            describe_query = f"DESCRIBE TABLE {table_name}"
+            result = client.query(describe_query)
+            existing_columns = {row[0]: row[1] for row in result.result_rows}
+            
+            # Check if any String columns are non-nullable and we have NULL values for them
+            for col_name in df.columns:
+                if col_name in existing_columns:
+                    col_type = existing_columns[col_name]
+                    has_nulls = df[col_name].isna().any()
+                    
+                    # If we have a String column that's not Nullable and we have NULL values
+                    if col_type == "String" and has_nulls:
+                        logger.warning(f"⚠️ Column '{col_name}' is non-nullable String but has NULL values")
+                        return True
+                    
+                    # Also check for other non-nullable types with NULL values
+                    if not col_type.startswith("Nullable(") and has_nulls:
+                        logger.warning(f"⚠️ Column '{col_name}' is non-nullable {col_type} but has NULL values")
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to check nullable recreation need: {str(e)}")
+            # If we can't check, assume we don't need recreation
+            return False
+    
+    def _recreate_table_with_nullable_schema(self, client, table_name: str, df: pd.DataFrame):
+        """
+        Recreate table with nullable schema, preserving existing data
+        """
+        try:
+            backup_table = f"{table_name}_backup_{int(pd.Timestamp.now().timestamp())}"
+            
+            logger.info(f"🔄 Recreating table {table_name} with nullable schema")
+            
+            # Step 1: Create backup table with existing data
+            backup_query = f"CREATE TABLE {backup_table} AS {table_name}"
+            client.command(backup_query)
+            logger.info(f"✅ Created backup table: {backup_table}")
+            
+            # Step 2: Drop original table
+            drop_query = f"DROP TABLE {table_name}"
+            client.command(drop_query)
+            logger.info(f"🗑️ Dropped original table: {table_name}")
+            
+            # Step 3: Create new table with nullable schema
+            columns_def = self._infer_clickhouse_schema(df)
+            engine_config = self._get_table_engine_config(df)
+            
+            create_table_sql = f"""
+                CREATE TABLE {table_name} (
+                    {columns_def}
+                ) {engine_config}
+            """
+            
+            client.command(create_table_sql)
+            logger.info(f"✅ Created new table with nullable schema: {table_name}")
+            
+            # Step 4: Insert data from backup (only common columns)
+            # Get columns that exist in both backup and new table
+            describe_backup = f"DESCRIBE TABLE {backup_table}"
+            backup_result = client.query(describe_backup)
+            backup_columns = [row[0] for row in backup_result.result_rows]
+            
+            new_columns = df.columns.tolist()
+            common_columns = [col for col in backup_columns if col in new_columns]
+            
+            if common_columns:
+                columns_list = ", ".join([f"`{col}`" for col in common_columns])
+                insert_query = f"""
+                    INSERT INTO {table_name} ({columns_list})
+                    SELECT {columns_list} FROM {backup_table}
+                """
+                client.command(insert_query)
+                logger.info(f"✅ Restored {len(common_columns)} columns from backup")
+            
+            # Step 5: Drop backup table
+            drop_backup_query = f"DROP TABLE {backup_table}"
+            client.command(drop_backup_query)
+            logger.info(f"🗑️ Cleaned up backup table: {backup_table}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to recreate table with nullable schema: {str(e)}")
+            # Try to restore from backup if it exists
+            try:
+                if 'backup_table' in locals():
+                    restore_query = f"RENAME TABLE {backup_table} TO {table_name}"
+                    client.command(restore_query)
+                    logger.info(f"🔄 Restored original table from backup")
+            except Exception as restore_error:
+                logger.error(f"❌ Failed to restore from backup: {str(restore_error)}")
+            raise e
+    
+    def _get_table_engine_config(self, df: pd.DataFrame = None) -> str:
+        """Get appropriate ClickHouse table engine configuration"""
+        # Check if upserts will be used and if upsert_keys are provided
+        use_replacing = (
+            self.sink_config.write_mode == WriteMode.UPSERT and 
+            self.sink_config.upsert_keys and 
+            len(self.sink_config.upsert_keys) > 0
+        )
+        
+        # Check custom config for engine preference
+        custom_config = self.sink_config.custom_config or {}
+        engine_type = custom_config.get('engine', 'auto')
+        
+        if engine_type == 'ReplacingMergeTree' or (engine_type == 'auto' and use_replacing):
+            # Use ReplacingMergeTree for upsert scenarios
+            if self.sink_config.upsert_keys:
+                # Use the first upsert key as the version column if it's a timestamp/numeric
+                version_col = custom_config.get('version_column')
+                if version_col:
+                    engine = f"ENGINE = ReplacingMergeTree({version_col})"
+                else:
+                    engine = "ENGINE = ReplacingMergeTree()"
+                
+                # Order by upsert keys for optimal performance
+                order_by = f"ORDER BY ({', '.join(self.sink_config.upsert_keys)})"
+            else:
+                engine = "ENGINE = ReplacingMergeTree()"
+                order_by = "ORDER BY tuple()"
+                
+            return f"{engine} {order_by}"
+        
+        else:
+            # Standard MergeTree engine
+            partition_by = custom_config.get('partition_by', '')
+            order_by = custom_config.get('order_by', 'tuple()')
+            
+            # Validate ORDER BY columns exist in the data if DataFrame is provided
+            if df is not None and order_by and order_by != 'tuple()':
+                order_by = self._validate_order_by_columns(order_by, df)
+            elif order_by and order_by != 'tuple()':
+                # Fix order_by syntax if it doesn't have parentheses
+                if not order_by.startswith('(') and ',' in order_by:
+                    order_by = f"({order_by})"
+                elif not order_by.startswith('(') and not order_by.startswith('tuple'):
+                    order_by = f"({order_by})"
+            
+            if partition_by:
+                return f"ENGINE = MergeTree() PARTITION BY {partition_by} ORDER BY {order_by}"
+            else:
+                return f"ENGINE = MergeTree() ORDER BY {order_by}"
 
 class DataLakeGen2SinkOperator(BaseSinkOperator):
     """Load data into Azure Data Lake Gen2"""

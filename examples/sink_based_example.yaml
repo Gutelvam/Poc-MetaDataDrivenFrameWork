@@ -1,0 +1,248 @@
+# Example: Sink-Based Data Sharing Pipeline
+# This example shows the new production-ready approach that replaces XCom with configurable sinks
+# Each task automatically creates a sink (default: temp database) that other tasks can query
+# Compatible with Airflow 3.x templating
+
+dag_id: "order_processing_sink_based"
+description: "Order processing pipeline using sink-based data sharing instead of XCom"
+pipeline_type: "batch"
+schedule_interval: "0 2 * * *"
+start_date: "2024-01-01"
+catchup: false
+owner: "data-team"
+tags: ["orders", "sink-based", "production"]
+
+tasks:
+  # Step 1: Extract orders data
+  - task_id: "extract_orders"
+    operator_type: "extract"
+    description: "Extract orders from database"
+    source:
+      name: "orders_source"
+      type: "postgresql"
+      connection_id: "postgres_conn"
+      query: "SELECT order_id, customer_id, order_date, amount FROM orders WHERE order_date >= current_date"
+    # NEW: Automatic sink configuration
+    auto_sink: true
+    auto_sink_type: "temp_database"  # Data will be available as table 'extract_orders'
+
+  # Step 2: Transform - Your "birds" example
+  - task_id: "birds"
+    operator_type: "transform"
+    description: "Select specific columns from orders (your example: SELECT 1,2,3 FROM orders)"
+    depends_on: ["extract_orders"]
+    # NEW: Source task IDs instead of XCom pulls
+    source_task_ids: ["extract_orders"]
+    sql_transform: |
+      SELECT 
+        order_id as column1,
+        customer_id as column2, 
+        amount as column3
+      FROM extract_orders
+      WHERE amount > 100
+    # Data automatically sinks to temp database as table 'birds'
+    auto_sink: true
+    auto_sink_type: "temp_database"
+
+  # Step 3: Second transform - Your example query
+  - task_id: "distinct_analysis"
+    operator_type: "transform"
+    description: "Query distinct values from birds table (your example: SELECT DISTINCT(1) FROM birds)"
+    depends_on: ["birds"]
+    # NEW: Query from previous task's sink instead of XCom
+    source_task_ids: ["birds"]
+    sql_transform: |
+      SELECT DISTINCT(column1) as distinct_orders,
+             COUNT(*) as count_per_order
+      FROM birds
+      GROUP BY column1
+      ORDER BY count_per_order DESC
+    auto_sink: true
+    auto_sink_type: "temp_database"
+
+  # Step 4: Load results to final destination
+  - task_id: "load_results"
+    operator_type: "load"
+    description: "Load processed data to final table"
+    depends_on: ["distinct_analysis"]
+    source_task_ids: ["distinct_analysis"]
+    sink:
+      name: "results_sink"
+      type: "postgresql"
+      connection_id: "postgres_conn"
+      table_name: "order_analysis_results"
+      write_mode: "overwrite"
+      auto_create_table: true
+
+  # Step 5: API notification task with no sink (procedure example)
+  - task_id: "notify_api"
+    operator_type: "custom"
+    description: "Trigger API notification - no data sink needed"
+    depends_on: ["load_results"]
+    # NEW: No automatic sink for procedure-type tasks
+    auto_sink: false
+    auto_sink_type: "none"
+    custom_function: "notifications.send_completion_notification"
+    custom_params:
+      api_endpoint: "https://api.example.com/notifications"
+      message: "Order processing completed"
+
+---
+# Alternative example with different sink types
+dag_id: "mixed_sink_types_example"
+description: "Example showing different automatic sink types"
+pipeline_type: "batch"
+schedule_interval: "@daily"
+start_date: "2024-01-01"
+
+tasks:
+  # Task with PostgreSQL temp sink
+  - task_id: "temp_postgres_example"
+    operator_type: "extract"
+    description: "Task using temporary PostgreSQL schema"
+    source:
+      name: "sample_data"
+      type: "postgresql"
+      connection_id: "postgres_conn"
+      query: "SELECT * FROM sample_table LIMIT 1000"
+    auto_sink: true
+    auto_sink_type: "temp_postgres"  # Uses temporary schema in PostgreSQL
+
+  # Task with file-based temp sink
+  - task_id: "temp_file_example"
+    operator_type: "transform"
+    description: "Task using temporary file sink"
+    depends_on: ["temp_postgres_example"]
+    source_task_ids: ["temp_postgres_example"]
+    python_transform: |
+      def process_data(datasets, **context):
+          import pandas as pd
+          from datetime import datetime
+          
+          # Access data from temp_postgres_example task
+          data = datasets.get('temp_postgres_example', [])
+          
+          # Process data
+          processed = []
+          for record in data:
+              record['processed_at'] = datetime.now().isoformat()
+              processed.append(record)
+          
+          return processed
+    auto_sink: true
+    auto_sink_type: "temp_file"  # Saves as JSON file
+
+  # Task with Azure Data Lake temp sink
+  - task_id: "temp_datalake_example"
+    operator_type: "transform"
+    description: "Task using Azure Data Lake Gen2 temporary sink"
+    depends_on: ["temp_file_example"]
+    source_task_ids: ["temp_file_example"]
+    sql_transform: |
+      SELECT *,
+             'large_dataset_processed' as processing_stage
+      FROM temp_file_example
+      WHERE processed_at IS NOT NULL
+    auto_sink: true
+    auto_sink_type: "temp_datalake"  # Saves as Parquet in Azure Data Lake Gen2
+
+  # Task with custom sink
+  - task_id: "custom_sink_example"
+    operator_type: "load"
+    description: "Task with explicitly defined custom sink"
+    depends_on: ["temp_datalake_example"]
+    source_task_ids: ["temp_datalake_example"]
+    # Override automatic sink with custom configuration
+    auto_sink: false
+    sink:
+      name: "custom_clickhouse_sink"
+      type: "clickhouse"
+      connection_id: "clickhouse_conn"
+      table_name: "processed_results"
+      write_mode: "append"
+
+---
+# Complex aggregation example
+dag_id: "aggregation_pipeline_sink_based"
+description: "Complex aggregation pipeline using sink-based approach"
+pipeline_type: "batch"
+schedule_interval: "0 6 * * *"
+start_date: "2024-01-01"
+
+tasks:
+  - task_id: "extract_sales"
+    operator_type: "extract"
+    description: "Extract daily sales data"
+    source:
+      name: "sales_source"
+      type: "postgresql"
+      connection_id: "postgres_conn"
+      query: |
+        SELECT 
+          sale_id, product_id, customer_id, sale_date, 
+          quantity, unit_price, total_amount, region
+        FROM sales 
+        WHERE sale_date = current_date
+    auto_sink: true
+
+  - task_id: "extract_products"
+    operator_type: "extract"
+    description: "Extract product information"
+    source:
+      name: "products_source"
+      type: "postgresql"
+      connection_id: "postgres_conn"
+      query: "SELECT product_id, product_name, category, brand FROM products"
+    auto_sink: true
+
+  - task_id: "join_sales_products"
+    operator_type: "transform"
+    description: "Join sales with product information"
+    depends_on: ["extract_sales", "extract_products"]
+    source_task_ids: ["extract_sales", "extract_products"]
+    sql_transform: |
+      SELECT 
+        s.sale_id,
+        s.customer_id,
+        s.sale_date,
+        s.quantity,
+        s.unit_price,
+        s.total_amount,
+        s.region,
+        p.product_name,
+        p.category,
+        p.brand
+      FROM extract_sales s
+      LEFT JOIN extract_products p ON s.product_id = p.product_id
+    auto_sink: true
+
+  - task_id: "daily_aggregation"
+    operator_type: "transform"
+    description: "Aggregate daily sales by category and region"
+    depends_on: ["join_sales_products"]
+    source_task_ids: ["join_sales_products"]
+    sql_transform: |
+      SELECT 
+        category,
+        region,
+        COUNT(*) as total_sales,
+        SUM(quantity) as total_quantity,
+        SUM(total_amount) as total_revenue,
+        AVG(total_amount) as avg_sale_amount,
+        current_date as processing_date
+      FROM join_sales_products
+      GROUP BY category, region
+    auto_sink: true
+
+  - task_id: "load_daily_summary"
+    operator_type: "load"
+    description: "Load aggregated results to reporting table"
+    depends_on: ["daily_aggregation"]
+    source_task_ids: ["daily_aggregation"]
+    sink:
+      name: "daily_summary_sink"
+      type: "postgresql"
+      connection_id: "postgres_conn"
+      table_name: "daily_sales_summary"
+      write_mode: "append"
+      auto_create_table: true

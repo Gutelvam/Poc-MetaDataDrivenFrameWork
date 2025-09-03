@@ -125,34 +125,133 @@ class MongoDBSourceOperator(BaseSourceOperator):
             client.close()
 
 class ClickHouseSourceOperator(BaseSourceOperator):
-    """Extract data from ClickHouse using clickhouse-sqlalchemy"""
+    """Extract data from ClickHouse using clickhouse-connect for better external connection support"""
+    
+    def _serialize_value(self, value):
+        """Serialize ClickHouse values for Airflow XCom compatibility"""
+        import uuid
+        import decimal
+        from datetime import datetime, date
+        
+        # Handle None values
+        if value is None:
+            return None
+            
+        # Handle UUID objects
+        if isinstance(value, uuid.UUID):
+            return str(value)
+            
+        # Handle datetime objects
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+            
+        # Handle decimal objects
+        if isinstance(value, decimal.Decimal):
+            return float(value)
+            
+        # Handle bytes
+        if isinstance(value, bytes):
+            try:
+                return value.decode('utf-8')
+            except UnicodeDecodeError:
+                return value.hex()  # Convert to hex string if not valid UTF-8
+                
+        # Handle tuples and lists (convert to lists for JSON serialization)
+        if isinstance(value, tuple):
+            return [self._serialize_value(item) for item in value]
+        elif isinstance(value, list):
+            return [self._serialize_value(item) for item in value]
+            
+        # Handle dictionaries
+        if isinstance(value, dict):
+            return {k: self._serialize_value(v) for k, v in value.items()}
+            
+        # For all other types, try to convert to string if not JSON serializable
+        try:
+            import json
+            json.dumps(value)  # Test if it's JSON serializable
+            return value
+        except (TypeError, ValueError):
+            return str(value)
     
     def extract_data(self, context) -> List[Dict]:
+        try:
+            import clickhouse_connect
+        except ImportError:
+            raise ImportError("clickhouse-connect is required for ClickHouse source operations. Install with: pip install clickhouse-connect")
+            
         connection = BaseHook.get_connection(self.source_config.connection_id)
         
-        # Build the SQLAlchemy connection string for ClickHouse
-        # The syntax is 'clickhouse://user:password@host:port/database'
-        conn_string = f"clickhouse://{connection.login}:{connection.password}@{connection.host}:{connection.port}/{connection.schema or 'default'}"
-        engine = create_engine(conn_string)
-        
         try:
+            # Extract connection parameters from Airflow connection
+            host = connection.host
+            port = connection.port or 8123  # Default HTTP port
+            username = connection.login or 'default'
+            password = connection.password or ''
+            database = connection.schema or 'default'
+            
+            # Parse extra connection parameters if provided
+            extra_params = {}
+            if hasattr(connection, 'extra_dejson') and connection.extra_dejson:
+                extra_params = connection.extra_dejson
+            
+            # Create ClickHouse client
+            client = clickhouse_connect.get_client(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                database=database,
+                secure=extra_params.get('secure', False),
+                verify=extra_params.get('verify', True),
+                connect_timeout=extra_params.get('connect_timeout', 10),
+                send_receive_timeout=extra_params.get('send_receive_timeout', 300),
+                compress=extra_params.get('compress', True)
+            )
+            
+            logger.info(f"Connected to ClickHouse at {host}:{port}, database: {database}")
+            
             # Build query
             if self.source_config.query:
                 query = self.source_config.query
             elif self.source_config.table_name:
-                query = f"SELECT * FROM {self.source_config.table_name}"
+                # Add schema prefix if specified
+                schema_prefix = f"{self.source_config.schema_name}." if self.source_config.schema_name else ""
+                query = f"SELECT * FROM {schema_prefix}{self.source_config.table_name}"
             else:
                 raise ValueError("Either query or table_name must be provided")
             
-            # Execute query and read into a pandas DataFrame
-            with engine.connect() as conn:
-                df = pd.read_sql_query(query, conn)
+            logger.info(f"Executing ClickHouse query: {query}")
             
-            return df.to_dict('records')
+            # Execute query
+            result = client.query(query)
             
+            # Convert to list of dictionaries with proper serialization
+            if result.result_rows:
+                columns = result.column_names
+                data = []
+                for row in result.result_rows:
+                    row_dict = {}
+                    for i, col_name in enumerate(columns):
+                        # Use the serialization helper to ensure XCom compatibility
+                        row_dict[col_name] = self._serialize_value(row[i])
+                    data.append(row_dict)
+                
+                logger.info(f"Successfully extracted {len(data)} rows from ClickHouse")
+                return data
+            else:
+                logger.warning("ClickHouse query returned no results")
+                return []
+                
+        except Exception as e:
+            logger.error(f"ClickHouse extraction failed: {str(e)}")
+            raise
         finally:
-            # The engine and its connections are managed by SQLAlchemy
-            pass
+            try:
+                if 'client' in locals():
+                    client.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing ClickHouse connection: {close_error}")
 
 class PgVectorSourceOperator(BaseSourceOperator):
     """Extract data from PostgreSQL with pgvector support"""

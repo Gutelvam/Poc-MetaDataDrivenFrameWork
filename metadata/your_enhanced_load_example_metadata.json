@@ -1,0 +1,67 @@
+{
+  "dag_id": "your_enhanced_load_example",
+  "created_at": "2025-09-02T03:30:02.016871",
+  "version": "1.0",
+  "config": {
+    "dag_id": "your_enhanced_load_example",
+    "description": "Your specific use case with both source and sink",
+    "pipeline_type": "batch",
+    "schedule_interval": "@daily",
+    "start_date": "2024-01-01",
+    "catchup": false,
+    "max_active_runs": 1,
+    "tags": [
+      "monitored"
+    ],
+    "owner": "data-platform",
+    "tasks": [
+      {
+        "task_id": "inicio",
+        "operator_type": "dummy",
+        "description": "Starting task",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "load_results",
+        "operator_type": "load",
+        "description": "Enhanced load with both source and sink - now fully supported!",
+        "source": {
+          "name": "orders_source",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "query": "SELECT * FROM public.orders"
+        },
+        "sink": {
+          "name": "results_sink",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "write_mode": "overwrite",
+          "schema_name": "public",
+          "table_name": "teste_results",
+          "auto_create_table": true
+        },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "inicio"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      }
+    ],
+    "dependencies": [],
+    "retries": 1,
+    "retry_delay": 300,
+    "allow_reprocessing": true,
+    "reprocess_lookback_days": 30
+  },
+  "validation_status": "valid",
+  "last_updated": "2025-09-02T03:30:02.016875"
+}

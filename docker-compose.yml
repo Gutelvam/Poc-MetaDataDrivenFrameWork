@@ -9,82 +9,134 @@ x-airflow-common:
   
   environment:
     &airflow-common-env
-    # FIXED: Use LocalExecutor as intended
-    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    # ============================================
+    # 🔥 CORE AIRFLOW CONFIGURATION
+    # ============================================
+    AIRFLOW__CORE__EXECUTOR: ${AIRFLOW_EXECUTOR:-LocalExecutor}
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/${POSTGRES_DB:-airflow}
     
-    AIRFLOW__CORE__FERNET_KEY: ''
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    # Security Configuration - Use environment variables for production
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-framework_secret_key_change_in_production_123456789}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:-framework_webserver_secret_change_in_production}
     
-    # FIXED: Execution API server URL for Airflow 3.0.4
+    # DAG Configuration
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: ${DAGS_PAUSED_AT_CREATION:-false}
+    AIRFLOW__CORE__LOAD_EXAMPLES: ${LOAD_EXAMPLES:-false}
+    AIRFLOW__CORE__STORE_DAG_CODE: 'true'
+    AIRFLOW__CORE__STORE_SERIALIZED_DAGS: 'true'
+    AIRFLOW__CORE__COMPRESS_SERIALIZED_DAGS: 'true'
+    
+    # API Configuration for Airflow 3.0.4
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
-    
-    # Scheduler health check
-    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    
-    # FIXED: API configuration for Airflow 3.0.4
+    AIRFLOW__CORE__INTERNAL_API_URL: 'http://airflow-apiserver:8080'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-    AIRFLOW__API__SECRET_KEY: 'framework_secret_key_change_in_production_123456789'
     AIRFLOW__API__ENABLE_EXPERIMENTAL_API: 'false'
     
-    # FIXED: Internal API configuration
-    AIRFLOW__CORE__INTERNAL_API_URL: 'http://airflow-apiserver:8080'
+    # Performance & Resource Configuration
+    AIRFLOW__CORE__PARALLELISM: ${AIRFLOW_PARALLELISM:-32}
+    AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: ${MAX_ACTIVE_RUNS_PER_DAG:-16}
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: ${MAX_ACTIVE_TASKS_PER_DAG:-16}
+    AIRFLOW__CORE__DEFAULT_TASK_RETRIES: ${DEFAULT_TASK_RETRIES:-2}
+    
+    # Timeout Configuration
+    AIRFLOW__CORE__TASK_TIMEOUT: ${TASK_TIMEOUT:-1800}  # 30 minutes
+    AIRFLOW__CORE__DAGRUN_TIMEOUT: ${DAGRUN_TIMEOUT:-3600}  # 1 hour
+    AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: ${DAGBAG_IMPORT_TIMEOUT:-180}
+    
+    # Security & Access Control
+    AIRFLOW__CORE__ALLOWED_DESERIALIZATION_CLASSES: 'airflow\..*'
+    AIRFLOW__CORE__ENABLE_XCOM_PICKLING: 'false'
+    
+    # Database Connection Pool Configuration
+    AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE: ${DB_POOL_SIZE:-10}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_RECYCLE: ${DB_POOL_RECYCLE:-3600}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_PRE_PING: 'true'
     
     # ============================================
-    # 🔥 STATSD METRICS CONFIGURATION (SIMPLIFIED)
+    # 🔥 SCHEDULER CONFIGURATION
     # ============================================
-    AIRFLOW__METRICS__STATSD_ON: 'true'
-    AIRFLOW__METRICS__STATSD_HOST: 'prometheus-statsd'
-    AIRFLOW__METRICS__STATSD_PORT: '8125'
-    AIRFLOW__METRICS__STATSD_PREFIX: 'airflow'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW__SCHEDULER__PARSING_PROCESSES: ${SCHEDULER_PARSING_PROCESSES:-2}
+    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: ${MIN_FILE_PROCESS_INTERVAL:-10}
+    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: ${DAG_REFRESH_INTERVAL:-30}
+    AIRFLOW__SCHEDULER__CATCHUP_BY_DEFAULT: ${CATCHUP_BY_DEFAULT:-false}
+    AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: ${DAG_DIR_LIST_INTERVAL:-300}
     
-    # Additional StatsD configuration
+    # ============================================
+    # 🔥 WEBSERVER CONFIGURATION
+    # ============================================
+    AIRFLOW__WEBSERVER__AUTHENTICATE: ${WEBSERVER_AUTHENTICATE:-true}
+    AIRFLOW__WEBSERVER__AUTH_BACKEND: 'airflow.auth.backends.password_auth'
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: ${EXPOSE_CONFIG:-true}
+    AIRFLOW__WEBSERVER__RBAC: 'true'
+    AIRFLOW__WEBSERVER__SESSION_BACKEND: 'database'
+    AIRFLOW__WEBSERVER__COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    AIRFLOW__WEBSERVER__COOKIE_SAMESITE: ${COOKIE_SAMESITE:-Lax}
+    AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: ${WEBSERVER_WORKER_TIMEOUT:-120}
+    AIRFLOW__WEBSERVER__WORKERS: ${WEBSERVER_WORKERS:-4}
+    
+    # ============================================
+    # 🔥 LOGGING CONFIGURATION
+    # ============================================
+    AIRFLOW__CORE__ENABLE_TASK_CONTEXT_LOGGER: 'true'
+    AIRFLOW__LOGGING__ENABLE_TASK_CONTEXT_LOGGER: 'true'
+    AIRFLOW__LOGGING__COLORED_CONSOLE_LOG: ${COLORED_CONSOLE_LOG:-true}
+    AIRFLOW__LOGGING__LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    AIRFLOW__LOGGING__REMOTE_LOGGING: ${REMOTE_LOGGING:-false}
+    AIRFLOW__LOGGING__LOG_PROCESSOR_FILENAME_TEMPLATE: '{{ ti.dag_id }}/{{ ti.task_id }}/{{ ts }}/{{ try_number }}.log'
+    
+    # ============================================
+    # 🔥 METRICS & MONITORING CONFIGURATION
+    # ============================================
+    AIRFLOW__METRICS__STATSD_ON: ${STATSD_ENABLED:-true}
+    AIRFLOW__METRICS__STATSD_HOST: ${STATSD_HOST:-prometheus-statsd}
+    AIRFLOW__METRICS__STATSD_PORT: ${STATSD_PORT:-8125}
+    AIRFLOW__METRICS__STATSD_PREFIX: ${STATSD_PREFIX:-airflow}
     AIRFLOW__METRICS__STATSD_DATADOG_ENABLED: 'false'
     AIRFLOW__METRICS__STATSD_DATADOG_TAGS: ''
     AIRFLOW__METRICS__STATSD_DISABLED_TAGS: ''
-    
-    # Enable detailed metrics
     AIRFLOW__METRICS__METRICS_ALLOW_LIST: ''
     AIRFLOW__METRICS__METRICS_BLOCK_LIST: ''
     
     # ============================================
-    # END STATSD CONFIGURATION
+    # 🔥 PROVIDER & PLUGIN CONFIGURATION  
     # ============================================
-    
-    # Webserver configuration
-    AIRFLOW__WEBSERVER__AUTHENTICATE: 'true'
-    AIRFLOW__WEBSERVER__AUTH_BACKEND: 'airflow.auth.backends.password_auth'
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
-    AIRFLOW__WEBSERVER__RBAC: 'true'
-    AIRFLOW__WEBSERVER__SESSION_BACKEND: 'database'
-    AIRFLOW__WEBSERVER__COOKIE_SECURE: 'false'
-    AIRFLOW__WEBSERVER__COOKIE_SAMESITE: 'Lax'
-    
-    # Task execution configuration
-    AIRFLOW__CORE__ENABLE_TASK_CONTEXT_LOGGER: 'true'
-    AIRFLOW__LOGGING__ENABLE_TASK_CONTEXT_LOGGER: 'true'
-    
-    # DAG processing configuration
-    AIRFLOW__CORE__DAG_DISCOVERY_SAFE_MODE: 'false'
-    AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '300'
-    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: '30'
-    AIRFLOW__SCHEDULER__PARSING_PROCESSES: '2'
-    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: '10'
-    
-    # Provider configuration
     AIRFLOW__CORE__LAZY_LOAD_PROVIDERS: 'true'
     AIRFLOW__CORE__LAZY_DISCOVER_PROVIDERS: 'true'
+    AIRFLOW__CORE__DAG_DISCOVERY_SAFE_MODE: ${DAG_DISCOVERY_SAFE_MODE:-false}
     
-    # Custom configuration
-    AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
-    
-    # Framework specific
-    FRAMEWORK_METADATA_PATH: /opt/airflow/metadata
+    # ============================================
+    # 🔥 FRAMEWORK CONFIGURATION
+    # ============================================
+    # Environment & Runtime
+    ENVIRONMENT: ${ENVIRONMENT:-development}
+    DEBUG_MODE: ${DEBUG_MODE:-true}
     PYTHONPATH: /opt/airflow/dags:/opt/airflow
     COMPOSE_CONVERT_WINDOWS_PATHS: 1
+    
+    # Framework Paths
+    FRAMEWORK_METADATA_PATH: ${FRAMEWORK_METADATA_PATH:-/opt/airflow/metadata}
+    FRAMEWORK_CONFIG_PATH: ${FRAMEWORK_CONFIG_PATH:-/opt/airflow/config}
+    FRAMEWORK_SCRIPTS_PATH: ${FRAMEWORK_SCRIPTS_PATH:-/opt/airflow/scripts}
+    
+    # Framework Settings
+    FRAMEWORK_LOG_LEVEL: ${FRAMEWORK_LOG_LEVEL:-INFO}
+    FRAMEWORK_ENABLE_METRICS: ${FRAMEWORK_ENABLE_METRICS:-true}
+    FRAMEWORK_AUTO_DISCOVER_CONNECTIONS: ${FRAMEWORK_AUTO_DISCOVER_CONNECTIONS:-true}
+    
+    # Additional Python packages
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    
+    # Configuration files
+    AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    
+    # External Service URLs (for framework integrations)
+    PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
+    GRAFANA_URL: ${GRAFANA_URL:-http://grafana:3000}
+    STATSD_EXPORTER_URL: ${STATSD_EXPORTER_URL:-http://prometheus-statsd:9102}
 
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
@@ -92,6 +144,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/metadata:/opt/airflow/metadata
+    - ${AIRFLOW_PROJ_DIR:-.}/scripts:/opt/airflow/scripts
   
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
@@ -102,11 +155,16 @@ x-airflow-common:
 services:
   # PostgreSQL - Airflow main database
   postgres:
-    image: postgres:13
+    image: postgres:${POSTGRES_VERSION:-13}
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER: ${POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: ${POSTGRES_DB:-airflow}
+      # Performance tuning
+      POSTGRES_INITDB_ARGS: ${POSTGRES_INITDB_ARGS:--E UTF8 --locale=en_US.utf8}
+      # Additional PostgreSQL configuration
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-md5}
+      POSTGRES_SHARED_PRELOAD_LIBRARIES: ${POSTGRES_SHARED_PRELOAD_LIBRARIES:-pg_stat_statements}
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
@@ -120,11 +178,12 @@ services:
 
   # PostgreSQL - Development database
   postgres-dev:
-    image: postgres:13
+    image: postgres:${POSTGRES_VERSION:-13}
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: test_database
+      POSTGRES_USER: ${POSTGRES_DEV_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_DEV_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DEV_DB:-test_database}
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-md5}
     volumes:
       - postgres-dev-volume:/var/lib/postgresql/data
     ports:
@@ -260,6 +319,33 @@ services:
       prometheus-statsd:
         condition: service_healthy
 
+  # ============================================
+  # 🔥 AIRFLOW METRICS SERVICE
+  # ============================================
+  airflow-metrics-service:
+    <<: *airflow-common
+    command: python /opt/airflow/dags/start_metrics_service.py
+    container_name: airflow-metrics-service
+    ports:
+      - "8090:8090"  # Prometheus metrics endpoint for our custom metrics
+    environment:
+      <<: *airflow-common-env
+      # Ensure Python can find our modules
+      PYTHONPATH: "/opt/airflow/dags:/opt/airflow"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+      prometheus-statsd:
+        condition: service_healthy
+
   # Initialization - FIXED for Airflow 3.0.4
   airflow-init:
     <<: *airflow-common
@@ -345,20 +431,38 @@ services:
   # 🔥 GRAFANA - UPDATED CONFIGURATION
   # ============================================
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:${GRAFANA_VERSION:-latest}
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_USERS_ALLOW_SIGN_UP: false
-      GF_LIVE_STREAM_ENABLED: true
-      GF_AUTH_ANONYMOUS_ENABLED: true
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_INSTALL_PLUGINS: 'grafana-piechart-panel,grafana-worldmap-panel,grafana-clock-panel'
+      # Security Configuration
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_SECRET_KEY: ${GRAFANA_SECRET_KEY:-SW2YcwTIb9zpOOhoPsMm}
+      
+      # User Management
+      GF_USERS_ALLOW_SIGN_UP: ${GRAFANA_ALLOW_SIGN_UP:-false}
+      GF_USERS_AUTO_ASSIGN_ORG: ${GRAFANA_AUTO_ASSIGN_ORG:-true}
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: ${GRAFANA_AUTO_ASSIGN_ORG_ROLE:-Viewer}
+      
+      # Authentication
+      GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS_ENABLED:-true}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: ${GRAFANA_ANONYMOUS_ORG_ROLE:-Viewer}
+      
+      # Features
+      GF_LIVE_STREAM_ENABLED: ${GRAFANA_LIVE_STREAM_ENABLED:-true}
+      GF_ALERTING_ENABLED: ${GRAFANA_ALERTING_ENABLED:-true}
+      
+      # Plugins
+      GF_INSTALL_PLUGINS: ${GRAFANA_INSTALL_PLUGINS:-grafana-piechart-panel,grafana-worldmap-panel,grafana-clock-panel}
+      
+      # Dashboards
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: '/var/lib/grafana/dashboards/airflow-overview.json'
-      # New environment variable to point to the provisioning file
       GF_PATHS_PROVISIONING: '/etc/grafana/provisioning'
+      
+      # Performance
+      GF_DATABASE_MAX_IDLE_CONN: ${GRAFANA_DB_MAX_IDLE_CONN:-2}
+      GF_DATABASE_MAX_OPEN_CONN: ${GRAFANA_DB_MAX_OPEN_CONN:-20}
     volumes:
       - grafana-data:/var/lib/grafana
       # Volume for provisioning data sources

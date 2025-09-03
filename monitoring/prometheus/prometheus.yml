@@ -24,3 +24,11 @@ scrape_configs:
       - targets: ['prometheus-statsd:9102']
     metrics_path: '/metrics'
     scrape_interval: 15s
+
+  # Enhanced job: Scrape custom Airflow metrics from our metrics service
+  - job_name: 'airflow_enhanced_metrics'
+    static_configs:
+      - targets: ['airflow-metrics-service:8090']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s

@@ -1,0 +1,70 @@
+{
+  "dag_id": "order_processing_sink_based_teste",
+  "created_at": "2025-08-25T23:31:12.558366",
+  "version": "1.0",
+  "config": {
+    "dag_id": "order_processing_sink_based_teste",
+    "description": "Order processing pipeline using sink-based data sharing instead of XCom",
+    "pipeline_type": "batch",
+    "schedule_interval": "0 2 * * *",
+    "start_date": "2024-01-01",
+    "catchup": false,
+    "max_active_runs": 1,
+    "tags": [
+      "orders",
+      "sink-based",
+      "production",
+      "monitored"
+    ],
+    "owner": "data-team",
+    "tasks": [
+      {
+        "task_id": "inicio",
+        "operator_type": "dummy",
+        "description": "Tarefa inicial",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "load_results",
+        "operator_type": "load",
+        "description": "Load processed data to final table",
+        "source": {
+          "name": "orders_source",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "query": "SELECT * FROM public.orders "
+        },
+        "sink": {
+          "name": "results_sink",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "write_mode": "overwrite",
+          "schema_name": "public",
+          "table_name": "teste_results",
+          "auto_create_table": true
+        },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "inicio"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      }
+    ],
+    "dependencies": [],
+    "retries": 1,
+    "retry_delay": 300,
+    "allow_reprocessing": true,
+    "reprocess_lookback_days": 30
+  },
+  "validation_status": "valid",
+  "last_updated": "2025-08-25T23:31:12.558368"
+}

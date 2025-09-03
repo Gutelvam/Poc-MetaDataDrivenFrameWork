@@ -1,0 +1,30 @@
+# Your specific use case - Now properly supported!
+dag_id: "your_enhanced_load_example"
+description: "Your specific use case with both source and sink"
+pipeline_type: "batch"
+schedule_interval: "@daily"
+start_date: "2024-01-01"
+
+tasks:
+  - task_id: "inicio"
+    operator_type: "dummy"
+    description: "Starting task"
+
+  - task_id: "load_results"
+    operator_type: "load"
+    description: "Enhanced load with both source and sink - now fully supported!"
+    depends_on: ["inicio"]
+    source:
+      name: "orders_source"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      query: "SELECT * FROM public.orders"
+    sink:
+      name: "results_sink"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      schema_name: "public"          # ✅ Now properly specified
+      table_name: "teste_results"
+      write_mode: "overwrite"
+      auto_create_table: true
+      

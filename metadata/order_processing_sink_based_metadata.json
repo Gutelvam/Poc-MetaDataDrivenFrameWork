@@ -1,0 +1,99 @@
+{
+  "dag_id": "order_processing_sink_based",
+  "created_at": "2025-09-02T03:30:01.964426",
+  "version": "1.0",
+  "config": {
+    "dag_id": "order_processing_sink_based",
+    "description": "Order processing pipeline using sink-based data sharing instead of XCom",
+    "pipeline_type": "batch",
+    "schedule_interval": "0 2 * * *",
+    "start_date": "2024-01-01",
+    "catchup": false,
+    "max_active_runs": 1,
+    "tags": [
+      "orders",
+      "sink-based",
+      "production",
+      "monitored"
+    ],
+    "owner": "data-team",
+    "tasks": [
+      {
+        "task_id": "extract_orders",
+        "operator_type": "extract",
+        "description": "Extract orders from database",
+        "source": {
+          "name": "orders_source",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "query": "SELECT * FROM public.orders "
+        },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "count_orders",
+        "operator_type": "transform",
+        "description": "SELECT count(*) from orders",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "extract_orders"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "sql_transform": "SELECT count(*) as total from extract_orders\n"
+      },
+      {
+        "task_id": "distinct_analysis",
+        "operator_type": "transform",
+        "description": "Query distinct values from previous step (your example: SELECT DISTINCT(1) FROM birds)",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "count_orders"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "sql_transform": "SELECT 'orders' as Orders,* \nFROM count_orders\n"
+      },
+      {
+        "task_id": "load_results",
+        "operator_type": "load",
+        "description": "Load processed data to final table",
+        "sink": {
+          "name": "results_sink",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "write_mode": "overwrite",
+          "table_name": "order_analysis_results",
+          "auto_create_table": true
+        },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "distinct_analysis"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success"
+      }
+    ],
+    "dependencies": [],
+    "retries": 1,
+    "retry_delay": 300,
+    "allow_reprocessing": true,
+    "reprocess_lookback_days": 30
+  },
+  "validation_status": "valid",
+  "last_updated": "2025-09-02T03:30:01.964428"
+}

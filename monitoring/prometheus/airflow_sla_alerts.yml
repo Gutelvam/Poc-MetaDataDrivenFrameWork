@@ -1,0 +1,247 @@
+groups:
+  - name: airflow_sla_alerts
+    interval: 30s
+    rules:
+      # CRITICAL: SLA Breach - Below 99%
+      - alert: AirflowSLABreach
+        expr: airflow_dag_success_rate < 99
+        for: 1m
+        labels:
+          severity: critical
+          service: airflow
+          alert_type: sla_breach
+        annotations:
+          summary: "🚨 CRITICAL: DAG {{$labels.dag_id}} below 99% SLA"
+          description: "DAG {{$labels.dag_id}} has success rate of {{$value}}%, which is below the 99% SLA target"
+          runbook_url: "https://docs.company.com/runbooks/airflow-sla-breach"
+          action_required: "Immediate investigation required"
+
+      # CRITICAL: Framework Component Down
+      - alert: AirflowFrameworkDown
+        expr: airflow_framework_health == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: airflow
+          alert_type: framework_health
+        annotations:
+          summary: "🔴 CRITICAL: Airflow Framework Component Down"
+          description: "Framework component {{$labels.component}} is unhealthy (value: {{$value}})"
+          action_required: "Check framework logs and restart component immediately"
+
+      # WARNING: Approaching SLA Threshold  
+      - alert: AirflowSLAWarning
+        expr: airflow_dag_success_rate < 99.5 and airflow_dag_success_rate >= 99
+        for: 2m
+        labels:
+          severity: warning
+          service: airflow
+          alert_type: sla_warning
+        annotations:
+          summary: "⚠️  WARNING: DAG {{$labels.dag_id}} approaching SLA threshold"
+          description: "DAG {{$labels.dag_id}} has success rate of {{$value}}%, getting close to 99% SLA limit"
+          action_required: "Monitor closely and prepare for potential intervention"
+
+      # CRITICAL: Multiple Consecutive Failures
+      - alert: AirflowConsecutiveFailures
+        expr: airflow_dag_consecutive_failures >= 3
+        for: 0s
+        labels:
+          severity: critical
+          service: airflow
+          alert_type: consecutive_failures
+        annotations:
+          summary: "🔥 CRITICAL: DAG {{$labels.dag_id}} has {{$value}} consecutive failures"
+          description: "DAG {{$labels.dag_id}} has failed {{$value}} times in a row - immediate action required"
+          action_required: "Check DAG logs, fix issues, and potentially disable DAG"
+
+      # WARNING: High Error Rate
+      - alert: AirflowHighErrorRate
+        expr: rate(airflow_errors_total[5m]) * 60 > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: airflow
+          alert_type: error_rate
+        annotations:
+          summary: "⚠️  High error rate: {{$value}} errors/minute"
+          description: "Error rate for {{$labels.dag_id}}.{{$labels.task_id}} ({{$labels.error_type}}) is {{$value}} errors per minute"
+
+      # CRITICAL: No Successful Runs in 4 Hours
+      - alert: AirflowNoRecentSuccess
+        expr: (time() - airflow_dag_last_success) > 14400
+        for: 1m
+        labels:
+          severity: critical
+          service: airflow
+          alert_type: no_recent_success
+        annotations:
+          summary: "🚨 CRITICAL: No successful runs for {{$labels.dag_id}} in 4+ hours"
+          description: "DAG {{$labels.dag_id}} hasn't had a successful run in {{$value}} seconds"
+          action_required: "Check DAG status and investigate blocking issues"
+
+      # WARNING: Long Task Duration
+      - alert: AirflowLongRunningTask
+        expr: histogram_quantile(0.95, rate(airflow_task_duration_seconds_bucket[10m])) > 3600
+        for: 5m
+        labels:
+          severity: warning
+          service: airflow
+          alert_type: long_duration
+        annotations:
+          summary: "⏱️  Long running task in DAG {{$labels.dag_id}}"
+          description: "95th percentile task duration is {{$value}} seconds (>1 hour)"
+
+      # CRITICAL: Queue Size Growing
+      - alert: AirflowQueueBacklog
+        expr: airflow_queue_size > 100
+        for: 5m
+        labels:
+          severity: critical
+          service: airflow
+          alert_type: queue_backlog
+        annotations:
+          summary: "📈 CRITICAL: Large queue backlog for {{$labels.dag_id}}"
+          description: "Queue size is {{$value}} tasks - potential resource shortage"
+          action_required: "Check resource availability and scaling"
+
+      # WARNING: Low Throughput
+      - alert: AirflowLowThroughput
+        expr: airflow_pipeline_throughput_records_per_second < 1
+        for: 10m
+        labels:
+          severity: warning
+          service: airflow
+          alert_type: low_throughput
+        annotations:
+          summary: "🐌 Low throughput: {{$labels.dag_id}} processing {{$value}} records/sec"
+          description: "Pipeline throughput is unusually low - check for performance issues"
+
+      # INFO: SLA Recovery
+      - alert: AirflowSLARecovery
+        expr: (airflow_dag_success_rate >= 99) and (airflow_dag_success_rate offset 5m < 99)
+        for: 1m
+        labels:
+          severity: info
+          service: airflow
+          alert_type: sla_recovery
+        annotations:
+          summary: "✅ SLA Recovery: {{$labels.dag_id}} back above 99%"
+          description: "DAG {{$labels.dag_id}} has recovered to {{$value}}% success rate"
+          action_required: "Monitor stability and document recovery"
+
+  - name: airflow_system_health
+    interval: 60s
+    rules:
+      # CRITICAL: System-wide SLA Breach
+      - alert: AirflowSystemSLABreach
+        expr: ((sum(rate(airflow_dag_runs_total{status="success"}[1h])) / sum(rate(airflow_dag_runs_total[1h]))) * 100) < 99
+        for: 2m
+        labels:
+          severity: critical
+          service: airflow
+          alert_type: system_sla_breach
+        annotations:
+          summary: "🚨 SYSTEM-WIDE SLA BREACH: Overall success rate {{$value}}%"
+          description: "System-wide success rate is {{$value}}%, below 99% SLA target"
+          action_required: "ESCALATE - Check all DAGs and system resources immediately"
+
+      # CRITICAL: Multiple DAGs in SLA Breach
+      - alert: AirflowMultipleSLABreach
+        expr: count(airflow_dag_success_rate < 99) >= 3
+        for: 1m
+        labels:
+          severity: critical
+          service: airflow
+          alert_type: multiple_sla_breach
+        annotations:
+          summary: "🔥 CRITICAL: {{$value}} DAGs below SLA threshold"
+          description: "Multiple DAGs are experiencing SLA breaches simultaneously"
+          action_required: "ESCALATE - Potential system-wide issue"
+
+      # WARNING: Monitoring System Health
+      - alert: AirflowMonitoringDown
+        expr: up{job="airflow-metrics"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: airflow-monitoring
+          alert_type: monitoring_down
+        annotations:
+          summary: "📊 Airflow metrics collection is down"
+          description: "Cannot collect Airflow metrics - monitoring system may be unhealthy"
+          action_required: "Check metrics server and Prometheus connectivity"
+
+# Alerting configuration
+rule_files:
+  - "airflow_sla_alerts.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Alert routing configuration for alertmanager.yml
+alertmanager_config: |
+  global:
+    smtp_smarthost: 'localhost:587'
+    smtp_from: 'airflow-alerts@company.com'
+
+  route:
+    group_by: ['alertname', 'service']
+    group_wait: 30s
+    group_interval: 2m
+    repeat_interval: 24h
+    receiver: 'default-receiver'
+    routes:
+    - match:
+        severity: critical
+        alert_type: sla_breach
+      receiver: 'sla-critical'
+      group_wait: 10s
+      repeat_interval: 5m
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 15m
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      repeat_interval: 1h
+
+  receivers:
+  - name: 'default-receiver'
+    email_configs:
+    - to: 'ops-team@company.com'
+      subject: 'Airflow Alert: {{ .GroupLabels.alertname }}'
+      
+  - name: 'sla-critical'
+    email_configs:
+    - to: 'sla-oncall@company.com,engineering-leads@company.com'
+      subject: '🚨 CRITICAL SLA BREACH: {{ .GroupLabels.dag_id }}'
+      body: |
+        CRITICAL: SLA breach detected
+        
+        Details:
+        {{ range .Alerts }}
+        - Alert: {{ .Annotations.summary }}
+        - Description: {{ .Annotations.description }}
+        - Action: {{ .Annotations.action_required }}
+        {{ end }}
+    slack_configs:
+    - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+      channel: '#airflow-critical'
+      title: '🚨 SLA BREACH ALERT'
+      text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+      
+  - name: 'critical-alerts'
+    email_configs:
+    - to: 'oncall@company.com'
+      subject: '🔴 Critical Airflow Alert: {{ .GroupLabels.alertname }}'
+      
+  - name: 'warning-alerts'
+    email_configs:
+    - to: 'ops-team@company.com'
+      subject: '⚠️  Airflow Warning: {{ .GroupLabels.alertname }}'

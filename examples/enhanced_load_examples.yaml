@@ -1,0 +1,115 @@
+dag_id: "enhanced_load_examples"
+description: "Examples of powerful enhanced LOAD operations"
+pipeline_type: "batch"
+schedule_interval: "@daily"
+start_date: "2024-01-01"
+catchup: false
+owner: "data-team"
+tags: ["enhanced-load", "examples", "powerful"]
+
+tasks:
+  # Example 1: Traditional Load (upstream data → sink)
+  - task_id: "extract_orders"
+    operator_type: "extract"
+    description: "Extract orders data"
+    source:
+      name: "orders_source"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      query: "SELECT * FROM orders WHERE created_date >= current_date - interval '1 day'"
+
+  - task_id: "traditional_load"
+    operator_type: "load"
+    description: "Traditional load: get data from upstream task"
+    depends_on: ["extract_orders"]
+    sink:
+      name: "daily_orders_sink"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      schema_name: "public"
+      table_name: "daily_orders"
+      write_mode: "overwrite"
+      auto_create_table: true
+
+  # Example 2: Enhanced Load (source → sink directly)
+  - task_id: "enhanced_load_direct"
+    operator_type: "load"
+    description: "Enhanced load: extract from source and load to sink directly"
+    source:
+      name: "customers_source"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      query: "SELECT * FROM customers WHERE status = 'active'"
+    sink:
+      name: "active_customers_sink"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      schema_name: "public"
+      table_name: "active_customers"
+      write_mode: "overwrite"
+      auto_create_table: true
+
+  # Example 3: Smart Load (both source and upstream - intelligent choice)
+  - task_id: "process_orders"
+    operator_type: "transform"
+    description: "Process orders with business logic"
+    depends_on: ["traditional_load"]
+    source_task_ids: ["traditional_load"]
+    python_transform: |
+      def process_orders(datasets, **context):
+          orders = datasets.get('traditional_load', [])
+          processed = []
+          for order in orders:
+              order['processed_date'] = context['execution_date'].isoformat()
+              order['status'] = 'processed'
+              processed.append(order)
+          return processed
+
+  - task_id: "smart_load_hybrid"
+    operator_type: "load"
+    description: "Smart load: try upstream data first, fallback to source extraction"
+    depends_on: ["process_orders"]
+    source:
+      name: "backup_orders_source"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      query: "SELECT *, current_timestamp as processed_date, 'backup_processed' as status FROM orders"
+    sink:
+      name: "processed_orders_sink"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      schema_name: "public"
+      table_name: "processed_orders"
+      write_mode: "append"
+      auto_create_table: true
+
+---
+# Your specific use case - Now properly supported!
+dag_id: "your_enhanced_load_example"
+description: "Your specific use case with both source and sink"
+pipeline_type: "batch"
+schedule_interval: "@daily"
+start_date: "2024-01-01"
+
+tasks:
+  - task_id: "inicio"
+    operator_type: "dummy"
+    description: "Starting task"
+
+  - task_id: "load_results"
+    operator_type: "load"
+    description: "Enhanced load with both source and sink - now fully supported!"
+    depends_on: ["inicio"]
+    source:
+      name: "orders_source"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      query: "SELECT * FROM public.orders"
+    sink:
+      name: "results_sink"
+      type: "postgresql"
+      connection_id: "postgres_dev"
+      schema_name: "public"          # ✅ Now properly specified
+      table_name: "teste_results"
+      write_mode: "overwrite"
+      auto_create_table: true

@@ -1,0 +1,219 @@
+{
+  "dag_id": "clickhouse_to_postgres_multi_sink",
+  "created_at": "2025-09-02T03:30:01.941900",
+  "version": "1.0",
+  "config": {
+    "dag_id": "clickhouse_to_postgres_multi_sink",
+    "description": "ETL pipeline with dynamic xAPI JSON parsing from ClickHouse to PostgreSQL",
+    "pipeline_type": "batch",
+    "schedule_interval": "@daily",
+    "start_date": "2024-01-01",
+    "catchup": false,
+    "max_active_runs": 1,
+    "tags": [
+      "clickhouse",
+      "postgresql",
+      "xapi",
+      "dynamic-parsing",
+      "etl",
+      "framework",
+      "monitored"
+    ],
+    "owner": "data-platform",
+    "tasks": [
+      {
+        "task_id": "extract_xapi_events",
+        "operator_type": "extract",
+        "description": "Extract raw xAPI events from ClickHouse",
+        "source": {
+          "name": "clickhouse_xapi_source",
+          "type": "clickhouse",
+          "connection_id": "clickhouse_dev",
+          "schema_name": "xapi",
+          "table_name": "xapi_events_all",
+          "query": "SELECT event_id, event, emission_time FROM xapi.xapi_events_all LIMIT 1000"
+        },
+        "sink": {
+          "name": "extract_temp_sink",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "write_mode": "overwrite",
+          "schema_name": "public",
+          "table_name": "temp_xapi_events_raw",
+          "auto_create_table": true,
+          "batch_size": 500
+        },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "retries": 2,
+        "retry_delay": 60,
+        "timeout": 600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "parse_xapi_events_postgres",
+        "operator_type": "transform",
+        "description": "Parse xAPI JSON events and save to PostgreSQL",
+        "sink": {
+          "name": "parsed_postgres_sink",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "write_mode": "overwrite",
+          "schema_name": "public",
+          "table_name": "xapi_events_parsed",
+          "auto_create_table": true,
+          "batch_size": 1000
+        },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "extract_xapi_events"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 2400,
+        "trigger_rule": "all_success",
+        "python_transform": "def parse_xapi_events(data, context):\n    \"\"\"Dynamically parse xAPI JSON events into separate columns\"\"\"\n    import sys\n    import pandas as pd\n    import logging\n    \n    logger = logging.getLogger(__name__)\n    logger.info(f\"\ud83d\udd0d === TRANSFORM DEBUGGING START ===\")\n    logger.info(f\"\ud83d\udd0d Received data type: {type(data)}\")\n    logger.info(f\"\ud83d\udd0d Data length: {len(data) if hasattr(data, '__len__') else 'N/A'}\")\n    logger.info(f\"\ud83d\udd0d Data content preview: {str(data)[:500] if data else 'None'}...\")\n    logger.info(f\"\ud83d\udd0d Context keys: {list(context.keys())}\")\n    \n    # Check if data is actually the parsed records or some metadata\n    if isinstance(data, list) and data:\n        first_item = data[0]\n        logger.info(f\"\ud83d\udd0d First item type: {type(first_item)}\")\n        logger.info(f\"\ud83d\udd0d First item keys: {list(first_item.keys()) if isinstance(first_item, dict) else 'Not a dict'}\")\n        logger.info(f\"\ud83d\udd0d First item content: {str(first_item)[:300]}...\")\n    elif isinstance(data, dict):\n        logger.info(f\"\ud83d\udd0d Dict keys: {list(data.keys())}\")\n        logger.info(f\"\ud83d\udd0d Dict content: {str(data)[:300]}...\")\n    \n    # Check if we need to get data from XCom directly\n    try:\n        task_instance = context.get('task_instance')\n        if task_instance:\n            xcom_data = task_instance.xcom_pull(task_ids='extract_xapi_events')\n            logger.info(f\"\ud83d\udd0d XCom data type: {type(xcom_data)}\")\n            logger.info(f\"\ud83d\udd0d XCom data length: {len(xcom_data) if hasattr(xcom_data, '__len__') else 'N/A'}\")\n            if xcom_data and isinstance(xcom_data, list) and len(xcom_data) > 0:\n                logger.info(f\"\ud83d\udd0d XCom first item: {str(xcom_data[0])[:200]}...\")\n                logger.info(f\"\ud83d\udd0d Using XCom data instead of passed data\")\n                data = xcom_data\n    except Exception as e:\n        logger.info(f\"\ud83d\udd0d Could not get XCom data: {e}\")\n    \n    logger.info(f\"\ud83d\udd0d === TRANSFORM DEBUGGING END ===\")\n    \n    sys.path.append('/opt/airflow/dags')\n    from transforms.dynamic_json_parser import DynamicJSONParserOperator\n    \n    # Handle different input data formats\n    df = None\n    try:\n        if isinstance(data, pd.DataFrame):\n            df = data\n            logger.info(f\"\ud83d\udcca Input is already DataFrame with shape: {df.shape}\")\n        elif isinstance(data, list):\n            if not data:\n                logger.warning(\"\ud83d\udcc4 Empty list received, returning empty result\")\n                return []\n            df = pd.DataFrame(data)\n            logger.info(f\"\ud83d\udcca Converted list to DataFrame with shape: {df.shape}\")\n        elif isinstance(data, dict):\n            # Single dictionary - convert to list first\n            df = pd.DataFrame([data])\n            logger.info(f\"\ud83d\udcca Converted single dict to DataFrame with shape: {df.shape}\")\n        else:\n            logger.error(f\"\u274c Unsupported data type: {type(data)}. Expected list, dict, or DataFrame\")\n            return data\n    except Exception as e:\n        logger.error(f\"\u274c Failed to convert data to DataFrame: {str(e)}\")\n        return data\n    \n    # Debug: Check available columns and data\n    logger.info(f\"\ud83d\udccb Available columns: {list(df.columns)}\")\n    logger.info(f\"\ud83d\udcca DataFrame shape: {df.shape}\")\n    logger.info(f\"\ud83d\udd0d DataFrame dtypes:\\n{df.dtypes}\")\n    \n    # Identify original non-JSON columns that must be preserved\n    original_columns = [col for col in df.columns if col not in ['event', 'xapi_event', 'json_data', 'event_data']]\n    logger.info(f\"\ud83c\udfaf Original columns to preserve: {original_columns}\")\n    \n    if len(df) > 0:\n        logger.info(f\"\ud83d\udcc4 Sample data (first row):\\n{df.iloc[0].to_dict()}\")\n    \n    # Find the JSON column with enhanced detection\n    json_column = None\n    possible_columns = ['event', 'xapi_event', 'json_data', 'event_data', 'data', 'payload']\n    \n    # First, try exact matches for expected column names\n    for col in possible_columns:\n        if col in df.columns:\n            json_column = col\n            logger.info(f\"\u2705 Found expected JSON column: {col}\")\n            break\n    \n    # If no exact match, search for JSON-like content in object columns\n    if json_column is None:\n        logger.info(\"\ud83d\udd0d No expected columns found, searching for JSON-like content...\")\n        for col in df.columns:\n            if df[col].dtype == 'object':  # String/object columns\n                # Get first non-null value for analysis\n                non_null_values = df[col].dropna()\n                if len(non_null_values) > 0:\n                    sample_value = non_null_values.iloc[0]\n                    logger.info(f\"\ud83d\udd0d Checking column '{col}': type={type(sample_value)}, sample={str(sample_value)[:100]}...\")\n                    \n                    if isinstance(sample_value, str):\n                        stripped = sample_value.strip()\n                        if stripped.startswith('{') or stripped.startswith('['):\n                            json_column = col\n                            logger.info(f\"\u2705 Found JSON-like column: {col}\")\n                            break\n                    elif isinstance(sample_value, (dict, list)):\n                        # Already parsed JSON objects\n                        json_column = col\n                        logger.info(f\"\u2705 Found JSON object column: {col}\")\n                        break\n    \n    if json_column is None:\n        logger.error(f\"\u274c No JSON column found in columns: {list(df.columns)}\")\n        logger.info(\"\ud83d\udd04 Returning original data unchanged\")\n        return data\n    \n    logger.info(f\"\ud83c\udfaf Using JSON column: '{json_column}'\")\n    \n    # Create parser instance with discovered column\n    try:\n        parser = DynamicJSONParserOperator(\n            task_id=\"parse_xapi_events_internal\",\n            source_task_id=\"extract_xapi_events\", \n            dag=None,\n            \n            # Parser Configuration\n            json_column=json_column,       # Use discovered JSON column\n            max_depth=4,                   # How deep to parse nested objects\n            include_original=True,         # Keep original JSON column for reference\n            column_prefix=\"xapi_\",         # Prefix for parsed columns\n            separator=\"_\",                 # Separator for nested fields\n            array_handling=\"json_string\",  # Use bullet-proof flattening for all arrays\n            type_inference=True,           # Auto-detect data types\n            clean_column_names=True        # Clean column names for SQL compatibility\n        )\n        \n        logger.info(\"\ud83d\udd27 Starting schema discovery...\")\n        all_fields = parser._discover_schema(df[json_column])\n        logger.info(f\"\ud83d\udcca Discovered {len(all_fields)} JSON fields\")\n        \n        # Show some discovered fields for debugging\n        field_sample = sorted(list(all_fields))[:10]\n        logger.info(f\"\ud83c\udff7\ufe0f  Sample fields: {field_sample}\")\n        if len(all_fields) > 10:\n            logger.info(f\"    ... and {len(all_fields) - 10} more fields\")\n        \n        logger.info(\"\ud83d\udd27 Starting record parsing...\")\n        parsed_df = parser._parse_json_records(df, all_fields)\n        \n        logger.info(f\"\u2705 Parsing complete! Result has {len(parsed_df.columns)} columns\")\n        logger.info(f\"\ud83d\udccb New columns: {list(parsed_df.columns)[:20]}...\")\n        \n        # Verify original columns are preserved\n        final_columns = list(parsed_df.columns)\n        preserved_count = sum(1 for col in original_columns if col in final_columns)\n        logger.info(f\"\ud83d\udd0d Original columns preserved: {preserved_count}/{len(original_columns)}\")\n        \n        # Check for critical columns\n        critical_columns = ['event_id', 'emission_time']\n        missing_critical = [col for col in critical_columns if col not in final_columns]\n        if missing_critical:\n            logger.error(f\"\u274c Missing critical columns: {missing_critical}\")\n        else:\n            logger.info(f\"\u2705 All critical columns preserved: {critical_columns}\")\n        \n        # Handle duplicate column names BEFORE serialization\n        logger.info(\"\ud83d\udd27 Handling duplicate column names...\")\n        \n        original_columns = list(parsed_df.columns)\n        logger.info(f\"\ud83d\udccb Original columns count: {len(original_columns)}\")\n        \n        # Detect and fix duplicate columns\n        seen_columns = {}\n        new_columns = []\n        duplicate_count = 0\n        \n        for col in original_columns:\n            if col not in seen_columns:\n                seen_columns[col] = 0\n                new_columns.append(col)\n            else:\n                seen_columns[col] += 1\n                new_col_name = f\"{col}_{seen_columns[col]}\"\n                new_columns.append(new_col_name)\n                duplicate_count += 1\n                logger.info(f\"\ud83d\udd04 Renamed duplicate column: '{col}' -> '{new_col_name}'\")\n        \n        # Apply new column names\n        parsed_df.columns = new_columns\n        logger.info(f\"\u2705 Fixed {duplicate_count} duplicate columns, final count: {len(new_columns)}\")\n        \n        # Convert pandas objects to serializable types after fixing duplicates\n        logger.info(\"\ud83d\udd27 Converting pandas objects to serializable types...\")\n        \n        # Convert DataFrame to ensure all values are JSON serializable\n        import json\n        import numpy as np\n        from datetime import datetime, date\n        \n        def serialize_value(val):\n            \"\"\"Convert pandas/numpy objects to JSON serializable types\"\"\"\n            if pd.isna(val) or val is None:\n                return None\n            elif isinstance(val, (pd.Timestamp, datetime, date)):\n                return val.isoformat() if hasattr(val, 'isoformat') else str(val)\n            elif isinstance(val, (np.integer, np.int64)):\n                return int(val)\n            elif isinstance(val, (np.floating, np.float64)):\n                return float(val)\n            elif isinstance(val, np.bool_):\n                return bool(val)\n            elif isinstance(val, (dict, list)):\n                return json.dumps(val, default=str)\n            else:\n                return val\n        \n        # Apply serialization to all columns (now with unique names)\n        for col in parsed_df.columns:\n            parsed_df[col] = parsed_df[col].apply(serialize_value)\n        \n        # Return as list of dictionaries\n        result = parsed_df.to_dict('records')\n        logger.info(f\"\ud83d\udce4 Returning {len(result)} serialized records\")\n        \n        # Since we're using temp_postgres, we DON'T need to return the full data\n        # The framework will save the data to temp table automatically\n        logger.info(f\"\ud83d\udcca Data size: {len(result)} records with {len(parsed_df.columns)} columns\")\n        logger.info(\"\ud83d\udd27 Using temp_postgres for data storage - not returning full data via XCom\")\n        \n        # Show sample for logging\n        if result:\n            sample_record = result[0]\n            logger.info(f\"\ud83d\udd0d Sample columns: {list(sample_record.keys())[:10]}...\")\n            logger.info(f\"\ud83d\udd0d event_id: {sample_record.get('event_id', 'N/A')}\")\n            logger.info(f\"\ud83d\udd0d emission_time: {sample_record.get('emission_time', 'N/A')}\")\n        \n        # IMPORTANT: The framework saves data to temp_postgres automatically via auto_sink\n        # We should return the data for the framework to handle\n        # But if it's hanging on XCom push, we need to check the data size\n        \n        import sys\n        data_str = str(result)\n        data_size_mb = len(data_str) / 1024 / 1024\n        logger.info(f\"\ud83d\udcca Final data size: {data_size_mb:.2f} MB\")\n        \n        # Return the data - framework will save to temp table\n        return result\n        \n    except Exception as e:\n        logger.error(f\"\u274c Parsing failed: {str(e)}\")\n        import traceback\n        logger.error(f\"\ud83d\udccb Full error traceback:\\n{traceback.format_exc()}\")\n        logger.info(\"\ud83d\udd04 Returning original data due to parsing failure\")\n        return data\n"
+      },
+      {
+        "task_id": "load_parsed_to_clickhouse",
+        "operator_type": "load",
+        "description": "Load parsed xAPI data to ClickHouse",
+        "source": {
+          "name": "postgres_parsed_source",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "query": "SELECT * FROM public.xapi_events_parsed"
+        },
+        "sink": {
+          "name": "parsed_clickhouse_sink",
+          "type": "clickhouse",
+          "connection_id": "clickhouse_dev",
+          "write_mode": "append",
+          "schema_name": "default",
+          "table_name": "teste_xapi_events_all_parsed",
+          "auto_create_table": true,
+          "batch_size": 5000,
+          "custom_config": {
+            "engine": "MergeTree",
+            "order_by": "event_id"
+          }
+        },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "parse_xapi_events_postgres"
+        ],
+        "retries": 2,
+        "retry_delay": 60,
+        "timeout": 600,
+        "trigger_rule": "all_success"
+      },
+      {
+        "task_id": "validate_parsing_quality",
+        "operator_type": "quality_check",
+        "description": "Validate quality of dynamically parsed xAPI data",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "parse_xapi_events_postgres",
+          "load_parsed_to_clickhouse"
+        ],
+        "retries": 3,
+        "retry_delay": 300,
+        "timeout": 3600,
+        "trigger_rule": "all_success",
+        "quality_rules": [
+          {
+            "name": "check_total_records",
+            "rule_type": "custom",
+            "parameters": {
+              "query": "SELECT COUNT(*) FROM public.xapi_events_parsed",
+              "min_threshold": 1
+            },
+            "threshold": 1.0,
+            "severity": "error"
+          },
+          {
+            "name": "check_records_exist",
+            "rule_type": "custom",
+            "parameters": {
+              "query": "SELECT COUNT(*) FROM public.xapi_events_parsed",
+              "min_threshold": 1
+            },
+            "threshold": 1.0,
+            "severity": "error"
+          },
+          {
+            "name": "check_xapi_fields_populated",
+            "rule_type": "custom",
+            "parameters": {
+              "query": "SELECT COUNT(*) FROM public.xapi_events_parsed \nWHERE (xapi_actor_account_name IS NOT NULL \n   OR xapi_verb_id IS NOT NULL \n   OR xapi_object_id IS NOT NULL)\n",
+              "min_threshold": 1
+            },
+            "threshold": 1.0,
+            "severity": "warning"
+          },
+          {
+            "name": "check_parsing_completeness",
+            "rule_type": "custom",
+            "parameters": {
+              "query": "SELECT \n  ROUND(\n    (COUNT(*) FILTER (WHERE xapi_actor_account_name IS NOT NULL) * 100.0) / COUNT(*), \n    2\n  ) as actor_coverage\nFROM public.xapi_events_parsed\n",
+              "min_threshold": 50.0
+            },
+            "threshold": 1.0,
+            "severity": "warning"
+          }
+        ]
+      },
+      {
+        "task_id": "create_parsing_summary",
+        "operator_type": "extract",
+        "description": "Extract summary statistics of parsed xAPI data from PostgreSQL",
+        "source": {
+          "name": "postgres_summary_source",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "query": "SELECT \n  COUNT(*) as total_events,\n  COUNT(CASE WHEN xapi_actor_account_name IS NOT NULL THEN 1 END) as events_with_actor,\n  COUNT(CASE WHEN xapi_verb_id IS NOT NULL THEN 1 END) as events_with_verb,\n  COUNT(CASE WHEN xapi_object_id IS NOT NULL THEN 1 END) as events_with_object,\n  COUNT(CASE WHEN xapi_result_completion IS NOT NULL THEN 1 END) as events_with_result,\n  COUNT(CASE WHEN xapi_timestamp IS NOT NULL THEN 1 END) as events_with_timestamp,\n  CURRENT_TIMESTAMP as summary_generated_at\nFROM public.xapi_events_parsed\n"
+        },
+        "sink": {
+          "name": "summary_sink",
+          "type": "postgresql",
+          "connection_id": "postgres_dev",
+          "write_mode": "overwrite",
+          "schema_name": "public",
+          "table_name": "xapi_parsing_summary",
+          "auto_create_table": true
+        },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
+        "depends_on": [
+          "validate_parsing_quality"
+        ],
+        "retries": 2,
+        "retry_delay": 60,
+        "timeout": 300,
+        "trigger_rule": "all_success"
+      }
+    ],
+    "dependencies": [],
+    "sla": 90,
+    "retries": 2,
+    "retry_delay": 300,
+    "allow_reprocessing": true,
+    "reprocess_lookback_days": 7,
+    "global_quality_rules": [
+      {
+        "name": "pipeline_execution_time",
+        "rule_type": "custom",
+        "parameters": {
+          "max_execution_time": 5400
+        },
+        "threshold": 1.0,
+        "severity": "warning"
+      }
+    ]
+  },
+  "validation_status": "valid",
+  "last_updated": "2025-09-02T03:30:01.941904"
+}

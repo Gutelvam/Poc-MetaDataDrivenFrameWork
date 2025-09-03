@@ -129,6 +129,12 @@ class TaskConfig:
     # Source and Sink configurations
     source: Optional[SourceConfig] = None
     sink: Optional[SinkConfig] = None
+    sinks: Optional[List[SinkConfig]] = None  # Multiple sink configurations for multi-output tasks
+    
+    # NEW: Automatic data sink configuration (replaces XCom)
+    auto_sink: bool = True  # Automatically create sink for task output
+    auto_sink_type: str = "temp_database"  # temp_database, temp_postgres, temp_file, none
+    source_task_ids: Optional[List[str]] = None  # Tasks to pull data from (replaces XCom pulls)
     
     # Dependencies
     depends_on: Optional[List[str]] = None
@@ -143,6 +149,9 @@ class TaskConfig:
     custom_script: Optional[str] = None
     custom_function: Optional[str] = None
     custom_params: Optional[Dict[str, Any]] = None
+    
+    # NEW: Python script execution from /scripts/ directory
+    python_script_path: Optional[str] = None  # Path to Python script in /scripts/ directory
     
     # Data quality
     quality_rules: Optional[List[DataQualityRule]] = None
@@ -223,6 +232,14 @@ class ConfigValidator:
             
             if task.operator_type == OperatorType.LOAD and not task.sink:
                 errors.append(f"Load task {task.task_id} must have sink configuration")
+            
+            # Enhanced validation for LOAD tasks - allow both source and sink for more powerful operations
+            if task.operator_type == OperatorType.LOAD:
+                has_upstream = task.depends_on and len(task.depends_on) > 0
+                has_source = task.source is not None
+                
+                if not has_upstream and not has_source:
+                    errors.append(f"Load task {task.task_id} must have either upstream dependencies or source configuration")
         
         return errors
     

@@ -1,6 +1,6 @@
 {
   "dag_id": "pipeline_exemplo_completo_fixed",
-  "created_at": "2025-08-22T19:45:33.263777",
+  "created_at": "2025-09-02T03:30:01.994357",
   "version": "1.0",
   "config": {
     "dag_id": "pipeline_exemplo_completo_fixed",
@@ -24,6 +24,8 @@
         "task_id": "inicio",
         "operator_type": "dummy",
         "description": "In\u00edcio do pipeline",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "retries": 1,
         "retry_delay": 60,
         "timeout": 3600,
@@ -41,6 +43,8 @@
           "table_name": "customers",
           "query": "SELECT \n  customer_id,\n  first_name,\n  last_name,\n  email,\n  registration_date,\n  country,\n  city,\n  age,\n  customer_segment,\n  total_orders,\n  total_spent,\n  last_order_date,\n  is_active\nFROM public.customers \nWHERE is_active = true\nAND registration_date >= (CURRENT_DATE - INTERVAL '30 days')\n"
         },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "inicio"
         ],
@@ -61,6 +65,8 @@
           "table_name": "orders",
           "query": "SELECT \n  order_id,\n  customer_id,\n  order_date,\n  order_amount,\n  product_category,\n  payment_method,\n  order_status,\n  shipping_country,\n  discount_amount,\n  tax_amount\nFROM public.orders \nWHERE order_date >= (CURRENT_DATE - INTERVAL '30 days')\nAND order_status = 'completed'\n"
         },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "inicio"
         ],
@@ -73,6 +79,8 @@
         "task_id": "qualidade_customers",
         "operator_type": "quality_check",
         "description": "Verifica qualidade dos dados de clientes",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "extrair_customers"
         ],
@@ -122,6 +130,8 @@
         "task_id": "qualidade_orders",
         "operator_type": "quality_check",
         "description": "Verifica qualidade dos dados de pedidos",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "extrair_orders"
         ],
@@ -154,6 +164,8 @@
         "task_id": "transformar_customer_summary_v2",
         "operator_type": "transform",
         "description": "Cria resumo dos clientes (usando dados originais)",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "extrair_customers",
           "extrair_orders"
@@ -168,6 +180,8 @@
         "task_id": "agregar_por_categoria",
         "operator_type": "transform",
         "description": "Agrega vendas por categoria",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "extrair_orders"
         ],
@@ -181,6 +195,8 @@
         "task_id": "validar_e_limpar",
         "operator_type": "transform",
         "description": "Valida e limpa os dados transformados",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "transformar_customer_summary_v2"
         ],
@@ -223,6 +239,8 @@
           ],
           "batch_size": 1000
         },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "validar_e_limpar"
         ],
@@ -245,6 +263,8 @@
           "auto_create_table": true,
           "batch_size": 100
         },
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "agregar_por_categoria"
         ],
@@ -257,6 +277,8 @@
         "task_id": "relatorio_qualidade",
         "operator_type": "quality_check",
         "description": "Gera relat\u00f3rio final de qualidade",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "validar_e_limpar"
         ],
@@ -277,6 +299,8 @@
         "task_id": "notificar_sucesso",
         "operator_type": "custom",
         "description": "Notifica sucesso do pipeline",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "carregar_customer_summary",
           "carregar_category_summary",
@@ -292,6 +316,8 @@
         "task_id": "fim",
         "operator_type": "dummy",
         "description": "Fim do pipeline",
+        "auto_sink": true,
+        "auto_sink_type": "temp_database",
         "depends_on": [
           "notificar_sucesso"
         ],
@@ -321,5 +347,5 @@
     ]
   },
   "validation_status": "valid",
-  "last_updated": "2025-08-22T19:45:33.263780"
+  "last_updated": "2025-09-02T03:30:01.994362"
 }

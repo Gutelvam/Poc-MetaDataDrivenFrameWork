@@ -187,12 +187,31 @@ class PythonTransformOperator(BaseOperator):
             else:
                 callable_func = self.python_callable
             
-            # Prepare arguments
-            args = (datasets,) + self.op_args
-            kwargs = {**self.op_kwargs, 'context': context}
-            
-            # Execute transformation
-            result = callable_func(*args, **kwargs)
+            # For inline functions, pass data differently based on function signature
+            import inspect
+            if callable_func and hasattr(callable_func, '__code__'):
+                # Check function signature
+                sig = inspect.signature(callable_func)
+                params = list(sig.parameters.keys())
+                
+                if len(params) >= 2 and params[0] == 'data' and params[1] == 'context':
+                    # Function expects (data, context) - for inline YAML functions
+                    # If single upstream task, pass data directly; otherwise pass dict
+                    if len(datasets) == 1:
+                        data_arg = list(datasets.values())[0]
+                    else:
+                        data_arg = datasets
+                    result = callable_func(data_arg, context)
+                else:
+                    # Standard format (datasets, *args, **kwargs)
+                    args = (datasets,) + self.op_args
+                    kwargs = {**self.op_kwargs, 'context': context}
+                    result = callable_func(*args, **kwargs)
+            else:
+                # Fallback to standard format
+                args = (datasets,) + self.op_args
+                kwargs = {**self.op_kwargs, 'context': context}
+                result = callable_func(*args, **kwargs)
             
             logger.info(f"Python transformation completed successfully")
             return result
@@ -202,13 +221,45 @@ class PythonTransformOperator(BaseOperator):
             raise
     
     def _resolve_callable_from_string(self, callable_string: str) -> Callable:
-        """Resolve callable from string (module.function format)"""
+        """Resolve callable from string (module.function format or inline code)"""
+        # Check if it's inline Python code (starts with 'def ')
+        if callable_string.strip().startswith('def '):
+            return self._compile_inline_function(callable_string)
+        
+        # Otherwise, treat as module.function format
         try:
             module_name, function_name = callable_string.rsplit('.', 1)
             module = importlib.import_module(module_name)
             return getattr(module, function_name)
         except Exception as e:
-            raise AirflowException(f"Failed to resolve callable '{callable_string}': {str(e)}")
+            raise AirflowException(f"Failed to resolve callable '{callable_string[:100]}...': {str(e)}")
+    
+    def _compile_inline_function(self, code_string: str) -> Callable:
+        """Compile and return inline Python function from string"""
+        try:
+            # Extract function name from the code
+            import re
+            match = re.match(r'def\s+(\w+)\s*\(', code_string.strip())
+            if not match:
+                raise ValueError("Invalid function definition")
+            
+            func_name = match.group(1)
+            
+            # Create a namespace for the function
+            namespace = {}
+            
+            # Execute the code to define the function
+            exec(code_string, namespace)
+            
+            # Return the function from the namespace
+            if func_name not in namespace:
+                raise ValueError(f"Function {func_name} not found after compilation")
+            
+            return namespace[func_name]
+            
+        except Exception as e:
+            logger.error(f"Failed to compile inline function: {str(e)}")
+            raise AirflowException(f"Failed to compile inline function: {str(e)}")
 
 class CustomScriptTransformOperator(BaseOperator):
     """Execute custom scripts for data transformation - Airflow 3.x compatible"""

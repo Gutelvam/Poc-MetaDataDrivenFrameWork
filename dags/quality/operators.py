@@ -334,13 +334,27 @@ class DataQualityOperator(BaseOperator):
         if data is None:
             raise AirflowException("No data provided for quality checks")
         
-        # Convert to DataFrame if needed
+        # Handle different data types from upstream tasks
         if isinstance(data, list):
             df = pd.DataFrame(data)
         elif isinstance(data, pd.DataFrame):
             df = data
+        elif isinstance(data, dict):
+            # Handle single record as dict
+            df = pd.DataFrame([data])
+        elif isinstance(data, (int, float, str)):
+            # Handle scalar values (like record counts from load tasks)
+            logger.info(f"Received scalar value from upstream task: {data}")
+            # For quality checks on loaded data, we need to query the target table
+            # instead of relying on return values from load tasks
+            return self._execute_quality_checks_on_target(context, data)
         else:
-            raise AirflowException(f"Unsupported data type for quality checks: {type(data)}")
+            # Try to convert unknown types to DataFrame
+            try:
+                df = pd.DataFrame(data)
+                logger.warning(f"Converted unknown data type {type(data)} to DataFrame")
+            except Exception as e:
+                raise AirflowException(f"Cannot convert data type {type(data)} to DataFrame for quality checks: {str(e)}")
         
         if df.empty:
             logger.warning("Empty dataset provided for quality checks")
@@ -397,6 +411,123 @@ class DataQualityOperator(BaseOperator):
             raise AirflowException(f"Critical data quality checks failed: {', '.join(critical_failures)}")
         
         return summary
+    
+    def _execute_quality_checks_on_target(self, context, upstream_result):
+        """Execute quality checks by querying the target database directly when only scalar results available"""
+        from airflow.hooks.base import BaseHook
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        
+        logger.info(f"Executing quality checks on target database. Upstream task returned: {upstream_result}")
+        
+        results = []
+        failed_critical_checks = []
+        
+        for rule in self.quality_rules:
+            try:
+                if rule.rule_type == "custom" and hasattr(rule, 'parameters') and "query" in rule.parameters:
+                    # Execute custom SQL query for validation
+                    result = self._execute_custom_sql_check(rule)
+                    results.append(result)
+                    
+                    if not result.passed and rule.severity in ["error", "critical"]:
+                        failed_critical_checks.append(result)
+                else:
+                    # Skip non-custom rules that require actual data
+                    logger.warning(f"Skipping rule '{rule.name}' - requires actual data, but only scalar value available")
+                    continue
+                    
+            except Exception as e:
+                logger.error(f"Quality check '{rule.name}' failed with error: {str(e)}")
+                error_result = DataQualityResult(
+                    rule.name, rule.rule_type, False, 0.0,
+                    {"error": str(e)}, rule.severity
+                )
+                results.append(error_result)
+                
+                if rule.severity in ["error", "critical"]:
+                    failed_critical_checks.append(error_result)
+        
+        # Calculate summary
+        passed_checks = sum(1 for r in results if r.passed)
+        total_score = sum(r.score for r in results) / len(results) if results else 0.0
+        
+        summary = {
+            "total_checks": len(results),
+            "passed_checks": passed_checks,
+            "failed_checks": len(results) - passed_checks,
+            "overall_score": total_score,
+            "results": [r.to_dict() for r in results],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        logger.info(f"Target database quality summary: {passed_checks}/{len(results)} checks passed")
+        
+        # Fail the task if there are critical failures and fail_on_error is True
+        if failed_critical_checks and self.fail_on_error:
+            failed_rules = [r.rule_name for r in failed_critical_checks]
+            raise AirflowException(f"Critical data quality checks failed: {', '.join(failed_rules)}")
+        
+        return summary
+    
+    def _execute_custom_sql_check(self, rule):
+        """Execute a custom SQL-based quality check against the target database"""
+        from airflow.hooks.base import BaseHook
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        
+        # Use PostgreSQL connection for the target database
+        connection = BaseHook.get_connection("postgres_dev")
+        
+        try:
+            conn = psycopg2.connect(
+                host=connection.host,
+                port=connection.port,
+                database=connection.schema,
+                user=connection.login,
+                password=connection.password
+            )
+            
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # Execute the custom query
+            query = rule.parameters["query"]
+            cursor.execute(query)
+            result = cursor.fetchone()
+            
+            # Get the actual value (assume single column result)
+            actual_value = list(result.values())[0] if result else 0
+            
+            # Check against thresholds
+            passed = True
+            message = f"Query result: {actual_value}"
+            
+            if "min_threshold" in rule.parameters:
+                if actual_value < rule.parameters["min_threshold"]:
+                    passed = False
+                    message = f"Result {actual_value} is below minimum threshold {rule.parameters['min_threshold']}"
+            
+            if "max_threshold" in rule.parameters:
+                if actual_value > rule.parameters["max_threshold"]:
+                    passed = False 
+                    message = f"Result {actual_value} is above maximum threshold {rule.parameters['max_threshold']}"
+                    
+            if hasattr(rule, 'threshold') and rule.threshold is not None:
+                if actual_value > rule.threshold:
+                    passed = False
+                    message = f"Result {actual_value} exceeds threshold {rule.threshold}"
+            
+            # Calculate score based on pass/fail
+            score = 1.0 if passed else 0.0
+            
+            return DataQualityResult(
+                rule.name, rule.rule_type, passed, score,
+                {"actual_value": actual_value, "message": message}, rule.severity
+            )
+            
+        finally:
+            if 'conn' in locals():
+                conn.close()
     
     def _run_quality_check(self, df: pd.DataFrame, rule: DataQualityRule) -> DataQualityResult:
         """Run a single quality check"""

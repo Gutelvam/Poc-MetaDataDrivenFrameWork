@@ -1,0 +1,48 @@
+# metadata/log_cleanup_monthly.yaml
+# Monthly Log Cleanup Pipeline using NEW Framework Python Script Feature
+
+dag_id: log_cleanup_monthly
+owner: framework-maintenance
+description: "Monthly cleanup of Airflow logs older than 1 month - Framework Pipeline with Python Script"
+schedule_interval: "0 2 1 * *"  # Run on 1st day of month at 2 AM
+start_date: "2024-01-01"
+catchup: false
+max_active_runs: 1
+retries: 1
+retry_delay: 300  # 5 minutes
+pipeline_type: maintenance
+tags:
+  - maintenance
+  - cleanup
+  - logs
+  - monthly
+  - framework
+  - python-script
+
+tasks:
+  # Single task: Execute comprehensive log cleanup script
+  - task_id: execute_log_cleanup_script
+    operator_type: transform
+    description: "Execute comprehensive log cleanup Python script"
+    retries: 2
+    retry_delay: 120
+    # NEW: Python script path execution from /scripts/ directory
+    python_script_path: "/scripts/log_cleanup.py"
+    # Script configuration parameters
+    custom_params:
+      days_old: 30
+      logs_path: "/opt/airflow/logs"
+    auto_sink: true
+    auto_sink_type: temp_database
+
+# Quality rules for monitoring the cleanup process
+quality_rules:
+  - rule_name: cleanup_success_check
+    description: "Verify that log cleanup completed successfully"
+    rule_type: completeness
+    threshold: 1.0
+    
+  - rule_name: disk_space_freed_check
+    description: "Verify that disk space was actually freed"
+    rule_type: validity
+    threshold: 0.01  # At least 10MB should be freed

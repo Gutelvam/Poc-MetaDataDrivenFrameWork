@@ -34,10 +34,10 @@ METRICS_REGISTRY = CollectorRegistry()
 
 # ==== ENHANCED PROMETHEUS METRICS FOR GRAFANA ====
 
-# DAG-level metrics
-DAG_RUNS_TOTAL = Counter(
+# DAG-level metrics - FIXED: Use Gauge for current counts
+DAG_RUNS_TOTAL = Gauge(
     'airflow_dag_runs_total',
-    'Total number of DAG runs',
+    'Total number of DAG runs in time period',
     ['dag_id', 'status'],
     registry=METRICS_REGISTRY
 )
@@ -78,10 +78,10 @@ DAG_CONSECUTIVE_FAILURES = Gauge(
     registry=METRICS_REGISTRY
 )
 
-# Task-level metrics
-TASK_RUNS_TOTAL = Counter(
+# Task-level metrics - FIXED: Use Gauge for current counts
+TASK_RUNS_TOTAL = Gauge(
     'airflow_task_runs_total',
-    'Total number of task runs',
+    'Total number of task runs in time period',
     ['dag_id', 'task_id', 'status'],
     registry=METRICS_REGISTRY
 )
@@ -101,10 +101,10 @@ TASK_SUCCESS_RATE = Gauge(
     registry=METRICS_REGISTRY
 )
 
-# Data processing metrics
-RECORDS_PROCESSED = Counter(
+# Data processing metrics - FIXED: Use Gauge for current counts
+RECORDS_PROCESSED = Gauge(
     'airflow_records_processed_total',
-    'Total records processed',
+    'Total records processed in time period',
     ['dag_id', 'task_id', 'source_type'],
     registry=METRICS_REGISTRY
 )
@@ -131,17 +131,17 @@ FRAMEWORK_HEALTH = Gauge(
     registry=METRICS_REGISTRY
 )
 
-# Error metrics
-ERROR_COUNT = Counter(
+# Error metrics - FIXED: Use Gauge for current counts
+ERROR_COUNT = Gauge(
     'airflow_errors_total',
-    'Total errors by type',
+    'Total errors by type in time period',
     ['dag_id', 'task_id', 'error_type'],
     registry=METRICS_REGISTRY
 )
 
-SLA_VIOLATIONS = Counter(
+SLA_VIOLATIONS = Gauge(
     'airflow_sla_violations_total',
-    'Total SLA violations',
+    'Total SLA violations in time period',
     ['dag_id'],
     registry=METRICS_REGISTRY
 )
@@ -224,7 +224,7 @@ class EnhancedMetricsCollector:
                 status='running',
                 metadata={
                     'run_id': run_id,
-                    'try_number': context.get('task_instance', {}).get('try_number', 1)
+                    'try_number': getattr(context.get('task_instance'), 'try_number', 1)
                 }
             )
             
@@ -365,7 +365,7 @@ class EnhancedMetricsCollector:
     
     @provide_session
     def _update_from_database(self, session=None):
-        """Update metrics from Airflow database"""
+        """Update metrics from Airflow database - FIXED for Airflow 3.x"""
         if not AIRFLOW_DB_AVAILABLE:
             return
             
@@ -395,10 +395,12 @@ class EnhancedMetricsCollector:
                 QUEUE_SIZE.labels(dag_id=dag_id).set(queue_size)
             
             # Update framework health based on recent failures
+            # FIXED: Use timezone-aware datetime and correct field name
+            from airflow.utils import timezone
             recent_failures = session.query(func.count(DagRun.dag_id)).filter(
                 and_(
                     DagRun.state == State.FAILED,
-                    DagRun.execution_date >= datetime.now() - timedelta(hours=1)
+                    DagRun.logical_date >= timezone.utcnow() - timedelta(hours=1)
                 )
             ).scalar()
             
@@ -410,8 +412,9 @@ class EnhancedMetricsCollector:
             FRAMEWORK_HEALTH.labels(component='database').set(db_health)
             
             # Calculate throughput for recent DAG runs
+            # FIXED: Use timezone-aware datetime and correct field name
             recent_runs = session.query(DagRun).filter(
-                DagRun.execution_date >= datetime.now() - timedelta(minutes=10)
+                DagRun.logical_date >= timezone.utcnow() - timedelta(minutes=10)
             ).all()
             
             for run in recent_runs:
@@ -497,7 +500,9 @@ class EnhancedPipelineMonitor:
     def on_dag_start(self, context):
         """DAG start callback"""
         try:
-            dag_id = context.get('dag', {}).get('dag_id', 'unknown')
+            # Fix for Airflow 3.x - dag is an object, not dict
+            dag = context.get('dag')
+            dag_id = dag.dag_id if dag and hasattr(dag, 'dag_id') else 'unknown'
             run_id = context.get('run_id', 'unknown')
             
             event = MetricEvent(
@@ -518,7 +523,9 @@ class EnhancedPipelineMonitor:
     def on_dag_success(self, context):
         """DAG success callback - FIXED for Airflow 3.x"""
         try:
-            dag_id = context.get('dag', {}).get('dag_id', 'unknown')
+            # Fix for Airflow 3.x - dag is an object, not dict
+            dag = context.get('dag')
+            dag_id = dag.dag_id if dag and hasattr(dag, 'dag_id') else 'unknown'
             run_id = context.get('run_id', 'unknown')
             
             # Safe duration calculation
@@ -544,7 +551,9 @@ class EnhancedPipelineMonitor:
     def on_dag_failure(self, context):
         """DAG failure callback"""
         try:
-            dag_id = context.get('dag', {}).get('dag_id', 'unknown')
+            # Fix for Airflow 3.x - dag is an object, not dict
+            dag = context.get('dag')
+            dag_id = dag.dag_id if dag and hasattr(dag, 'dag_id') else 'unknown'
             run_id = context.get('run_id', 'unknown')
             exception = context.get('exception', 'Unknown error')
             
@@ -569,8 +578,11 @@ class EnhancedPipelineMonitor:
     def on_task_start(self, context):
         """Task start callback"""
         try:
-            dag_id = context.get('dag', {}).get('dag_id', 'unknown')
-            task_id = context.get('task', {}).get('task_id', 'unknown')
+            # Fix for Airflow 3.x - dag and task are objects, not dicts
+            dag = context.get('dag')
+            task = context.get('task')
+            dag_id = dag.dag_id if dag and hasattr(dag, 'dag_id') else 'unknown'
+            task_id = task.task_id if task and hasattr(task, 'task_id') else 'unknown'
             run_id = context.get('run_id', 'unknown')
             
             self.metrics.record_task_start(dag_id, task_id, run_id, **context)
@@ -580,8 +592,11 @@ class EnhancedPipelineMonitor:
     def on_task_success(self, context):
         """Task success callback - FIXED for Airflow 3.x"""
         try:
-            dag_id = context.get('dag', {}).get('dag_id', 'unknown')
-            task_id = context.get('task', {}).get('task_id', 'unknown')
+            # Fix for Airflow 3.x - dag and task are objects, not dicts
+            dag = context.get('dag')
+            task = context.get('task')
+            dag_id = dag.dag_id if dag and hasattr(dag, 'dag_id') else 'unknown'
+            task_id = task.task_id if task and hasattr(task, 'task_id') else 'unknown'
             run_id = context.get('run_id', 'unknown')
             
             # Safe duration calculation for Airflow 3.x
@@ -601,7 +616,7 @@ class EnhancedPipelineMonitor:
                 metadata={
                     'execution_date': context.get('execution_date', datetime.now()).isoformat(),
                     'run_id': run_id,
-                    'operator': context.get('task', {}).__class__.__name__
+                    'operator': task.__class__.__name__ if task else 'unknown'
                 }
             )
             self.metrics.record_event(event)
@@ -612,8 +627,11 @@ class EnhancedPipelineMonitor:
     def on_task_failure(self, context):
         """Task failure callback"""
         try:
-            dag_id = context.get('dag', {}).get('dag_id', 'unknown')
-            task_id = context.get('task', {}).get('task_id', 'unknown')
+            # Fix for Airflow 3.x - dag and task are objects, not dicts
+            dag = context.get('dag')
+            task = context.get('task')
+            dag_id = dag.dag_id if dag and hasattr(dag, 'dag_id') else 'unknown'
+            task_id = task.task_id if task and hasattr(task, 'task_id') else 'unknown'
             run_id = context.get('run_id', 'unknown')
             exception = context.get('exception', 'Unknown error')
             
@@ -702,7 +720,8 @@ class EnhancedPipelineMonitor:
         """Extract number of records processed from task result"""
         try:
             task_instance = context.get('task_instance')
-            task_id = context.get('task', {}).get('task_id')
+            task = context.get('task')
+            task_id = task.task_id if task and hasattr(task, 'task_id') else None
             
             if not task_instance or not task_id:
                 return None

@@ -48,21 +48,46 @@ def create_metadata_dags():
                 MetricsExporter
             )
             
-            # Start metrics server in background thread
-            def start_metrics_server():
-                try:
-                    metrics_server = MetricsExporter(enhanced_metrics_collector, port=8090)
-                    logger.info("🚀 Starting Framework Metrics Server on port 8090...")
-                    metrics_server.run()
-                except Exception as e:
-                    logger.error(f"Failed to start metrics server: {e}")
-            
-            # Start metrics server in daemon thread
-            metrics_thread = threading.Thread(target=start_metrics_server, daemon=True)
-            metrics_thread.start()
-            
-            monitoring_available = True
-            logger.info("✅ Enhanced monitoring system initialized")
+            # Try to start the comprehensive metrics service
+            try:
+                from monitoring.metrics_service import AirflowMetricsService
+                
+                # Start metrics service that populates real data
+                def start_comprehensive_metrics():
+                    try:
+                        service = AirflowMetricsService(update_interval=30)
+                        logger.info("🚀 Starting Comprehensive Airflow Metrics Service...")
+                        service.start()
+                    except Exception as e:
+                        logger.error(f"Failed to start comprehensive metrics service: {e}")
+                        # Fallback to basic metrics server
+                        metrics_server = MetricsExporter(enhanced_metrics_collector, port=8090)
+                        logger.info("🚀 Starting Basic Framework Metrics Server on port 8090...")
+                        metrics_server.run()
+                
+                # Start comprehensive metrics in daemon thread
+                metrics_thread = threading.Thread(target=start_comprehensive_metrics, daemon=True)
+                metrics_thread.start()
+                
+                monitoring_available = True
+                logger.info("✅ Enhanced monitoring system with real data initialized")
+                
+            except ImportError as e:
+                logger.warning(f"Comprehensive metrics service not available: {e}")
+                # Fallback to basic metrics server
+                def start_basic_metrics_server():
+                    try:
+                        metrics_server = MetricsExporter(enhanced_metrics_collector, port=8090)
+                        logger.info("🚀 Starting Basic Framework Metrics Server on port 8090...")
+                        metrics_server.run()
+                    except Exception as e:
+                        logger.error(f"Failed to start basic metrics server: {e}")
+                
+                metrics_thread = threading.Thread(target=start_basic_metrics_server, daemon=True)
+                metrics_thread.start()
+                
+                monitoring_available = True
+                logger.info("✅ Basic monitoring system initialized")
             
         except ImportError as e:
             logger.warning(f"Enhanced monitoring not available: {e}")
@@ -71,13 +96,13 @@ def create_metadata_dags():
         # Try to import enhanced DAG factory
         try:
             if monitoring_available:
-                from dag_factory import MonitoredDAGFactory
-                factory = MonitoredDAGFactory()
-                logger.info("✅ Using MonitoredDAGFactory with enhanced metrics")
+                from dag_factory import IntegratedDAGFactory
+                factory = IntegratedDAGFactory()
+                logger.info("✅ Using IntegratedDAGFactory with enhanced metrics")
             else:
-                from dag_factory import SimplifiedDAGFactory
-                factory = SimplifiedDAGFactory()
-                logger.info("✅ Using SimplifiedDAGFactory (monitoring disabled)")
+                from dag_factory import IntegratedDAGFactory
+                factory = IntegratedDAGFactory()
+                logger.info("✅ Using IntegratedDAGFactory (monitoring disabled)")
                 
         except ImportError as e:
             logger.error(f"❌ Failed to import DAG factory: {e}")

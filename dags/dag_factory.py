@@ -22,6 +22,7 @@ from transforms.operators import (
     create_validation_transform_operator,
     create_aggregation_transform_operator
 )
+from transforms.python_script_operator import create_python_script_transform_operator
 from quality.operators import create_data_quality_operator
 
 # Import configuration classes
@@ -33,15 +34,30 @@ from core.config import (
 # Import metadata management
 from metadata.manager import MetadataManager
 
-# Import enhanced monitoring
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Import enhanced load operator
+from operators.enhanced_load_operator import create_enhanced_load_operator, create_smart_load_operator
+
+# Import enhanced monitoring with ALL metrics
 try:
     from monitoring.metrics import (
         enhanced_pipeline_monitor,
         get_enhanced_monitoring_callbacks,
         get_task_monitoring_callbacks,
-        MetricEvent
+        MetricEvent,
+        EnhancedMetricsCollector,
+        # Import ALL Prometheus metrics
+        DAG_RUNS_TOTAL, DAG_SUCCESS_RATE, DAG_DURATION, DAG_LAST_SUCCESS, 
+        DAG_LAST_FAILURE, DAG_CONSECUTIVE_FAILURES, TASK_RUNS_TOTAL, 
+        TASK_DURATION, TASK_SUCCESS_RATE, RECORDS_PROCESSED, 
+        DATA_QUALITY_SCORE, ACTIVE_TASKS, FRAMEWORK_HEALTH, 
+        ERROR_COUNT, SLA_VIOLATIONS, PIPELINE_THROUGHPUT, QUEUE_SIZE
     )
     MONITORING_AVAILABLE = True
+    logger.info("✅ All monitoring metrics imported successfully")
 except ImportError as e:
     logging.warning(f"Enhanced monitoring not available: {e}")
     MONITORING_AVAILABLE = False
@@ -49,10 +65,31 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 class IntegratedDAGFactory:
-    """DAG factory that properly uses your framework operators"""
+    """DAG factory that properly uses your framework operators with comprehensive metrics logging"""
     
     def __init__(self, metadata_path: str = "/opt/airflow/metadata"):
         self.metadata_manager = MetadataManager(metadata_path)
+        
+        # Initialize comprehensive metrics collector
+        if MONITORING_AVAILABLE:
+            self.metrics_collector = EnhancedMetricsCollector()
+            self._initialize_framework_health_metrics()
+            logger.info("🎯 IntegratedDAGFactory initialized with comprehensive metrics logging")
+    
+    def _initialize_framework_health_metrics(self):
+        """Initialize framework component health metrics"""
+        try:
+            # Framework component health
+            FRAMEWORK_HEALTH.labels(component='dag_factory').set(1)
+            FRAMEWORK_HEALTH.labels(component='metadata_manager').set(1) 
+            FRAMEWORK_HEALTH.labels(component='operators').set(1)
+            FRAMEWORK_HEALTH.labels(component='monitoring').set(1)
+            
+            logger.info("🏥 Framework health metrics initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize health metrics: {e}")
+            if MONITORING_AVAILABLE:
+                FRAMEWORK_HEALTH.labels(component='dag_factory').set(0)
     
     def create_dag(self, config_file: str) -> DAG:
         """Create a DAG using your real framework operators"""
@@ -100,6 +137,13 @@ class IntegratedDAGFactory:
             # Save metadata using your metadata manager
             self.metadata_manager.save_pipeline_metadata(pipeline_config)
             
+            # LOG ALL COMPREHENSIVE METRICS for DAG creation
+            if MONITORING_AVAILABLE:
+                try:
+                    self._log_comprehensive_dag_metrics(pipeline_config, len(tasks))
+                except Exception as e:
+                    logger.error(f"Failed to log DAG metrics: {e}")
+            
             # Record DAG creation event
             if MONITORING_AVAILABLE:
                 try:
@@ -145,15 +189,31 @@ class IntegratedDAGFactory:
             if not task_config.source:
                 raise ValueError(f"Extract task {task_config.task_id} requires source configuration")
             
-            # Use your actual source operator
-            return create_source_operator(
-                task_id=task_config.task_id,
-                source_config=task_config.source,
-                dag=dag,
-                retries=task_config.retries,
-                retry_delay=timedelta(seconds=task_config.retry_delay),
-                **task_callbacks
-            )
+            # Check if extract task also has a sink (for direct extract-and-load operations)
+            if task_config.sink:
+                logger.info(f"🔄 Creating Extract-and-Load operator for {task_config.task_id} with both source and sink")
+                # Use enhanced load operator which handles both source and sink
+                return create_enhanced_load_operator(
+                    task_id=task_config.task_id,
+                    sink_config=task_config.sink,
+                    source_config=task_config.source,
+                    data_source_task_id=None,  # No upstream task for extract
+                    prefer_upstream=False,  # Always use source for extract
+                    dag=dag,
+                    retries=task_config.retries,
+                    retry_delay=timedelta(seconds=task_config.retry_delay),
+                    **task_callbacks
+                )
+            else:
+                # Standard extract without sink - data goes to XCom
+                return create_source_operator(
+                    task_id=task_config.task_id,
+                    source_config=task_config.source,
+                    dag=dag,
+                    retries=task_config.retries,
+                    retry_delay=timedelta(seconds=task_config.retry_delay),
+                    **task_callbacks
+                )
         
         elif task_config.operator_type == OperatorType.TRANSFORM:
             # Determine transform type and use appropriate operator
@@ -173,10 +233,52 @@ class IntegratedDAGFactory:
             elif task_config.python_transform:
                 upstream_task_ids = task_config.depends_on or []
                 
-                return create_python_transform_operator(
+                # Check if transform task has multiple sinks configuration
+                if hasattr(task_config, 'sinks') and task_config.sinks:
+                    logger.info(f"🔄 Creating Transform operator with multiple sinks for {task_config.task_id}")
+                    # Create a combined transform + multi-sink operator
+                    from operators.transform_with_multi_sink_operator import create_transform_with_multi_sink_operator
+                    return create_transform_with_multi_sink_operator(
+                        task_id=task_config.task_id,
+                        python_callable=task_config.python_transform,
+                        data_source_task_ids=upstream_task_ids,
+                        sink_configs=task_config.sinks,
+                        dag=dag,
+                        **task_callbacks
+                    )
+                # Check if transform task has a single sink configuration
+                elif task_config.sink:
+                    logger.info(f"🔄 Creating Transform operator with sink for {task_config.task_id}")
+                    # Create a combined transform + sink operator
+                    from operators.transform_with_sink_operator import create_transform_with_sink_operator
+                    return create_transform_with_sink_operator(
+                        task_id=task_config.task_id,
+                        python_callable=task_config.python_transform,
+                        data_source_task_ids=upstream_task_ids,
+                        sink_config=task_config.sink,
+                        dag=dag,
+                        **task_callbacks
+                    )
+                else:
+                    # Standard transform without sink
+                    return create_python_transform_operator(
+                        task_id=task_config.task_id,
+                        python_callable=task_config.python_transform,
+                        data_source_task_ids=upstream_task_ids,
+                        dag=dag,
+                        **task_callbacks
+                    )
+            
+            elif task_config.python_script_path:
+                # NEW: Python script execution from /scripts/ directory
+                upstream_task_ids = task_config.depends_on or []
+                source_task_ids = task_config.source_task_ids or upstream_task_ids
+                
+                return create_python_script_transform_operator(
                     task_id=task_config.task_id,
-                    python_callable=task_config.python_transform,
-                    data_source_task_ids=upstream_task_ids,
+                    python_script_path=task_config.python_script_path,
+                    source_task_ids=source_task_ids,
+                    script_args=task_config.custom_params or {},
                     dag=dag,
                     **task_callbacks
                 )
@@ -211,19 +313,51 @@ class IntegratedDAGFactory:
             if not task_config.sink:
                 raise ValueError(f"Load task {task_config.task_id} requires sink configuration")
             
-            # Get upstream task ID for data source
+            # Enhanced Load Logic - Support both upstream data and direct source extraction
             data_source_task_id = task_config.depends_on[0] if task_config.depends_on else None
             
-            # Use your actual sink operator
-            return create_sink_operator(
-                task_id=task_config.task_id,
-                sink_config=task_config.sink,
-                data_source_task_id=data_source_task_id,
-                dag=dag,
-                retries=task_config.retries,
-                retry_delay=timedelta(seconds=task_config.retry_delay),
-                **task_callbacks
-            )
+            # Determine if we should use Smart Load or Enhanced Load
+            if task_config.source and data_source_task_id:
+                logger.info(f"🎯 Creating Smart Load operator for {task_config.task_id} with both source and upstream data")
+                # Smart operator with both source and upstream - will choose intelligently
+                return create_smart_load_operator(
+                    task_id=task_config.task_id,
+                    sink_config=task_config.sink,
+                    source_config=task_config.source,
+                    data_source_task_id=data_source_task_id,
+                    dag=dag,
+                    retries=task_config.retries,
+                    retry_delay=timedelta(seconds=task_config.retry_delay),
+                    **task_callbacks
+                )
+            elif task_config.source:
+                logger.info(f"📤 Creating Enhanced Load operator for {task_config.task_id} with source extraction")
+                # Enhanced load with source extraction only
+                return create_enhanced_load_operator(
+                    task_id=task_config.task_id,
+                    sink_config=task_config.sink,
+                    source_config=task_config.source,
+                    data_source_task_id=None,
+                    prefer_upstream=False,  # Only source available
+                    dag=dag,
+                    retries=task_config.retries,
+                    retry_delay=timedelta(seconds=task_config.retry_delay),
+                    **task_callbacks
+                )
+            else:
+                logger.info(f"📥 Creating Enhanced Load operator for {task_config.task_id} with upstream data only")
+                # Enhanced load with upstream data only (traditional behavior)
+                return create_enhanced_load_operator(
+                    task_id=task_config.task_id,
+                    sink_config=task_config.sink,
+                    source_config=None,
+                    data_source_task_id=data_source_task_id,
+                    prefer_upstream=True,  # Only upstream available
+                    dag=dag,
+                    retries=task_config.retries,
+                    retry_delay=timedelta(seconds=task_config.retry_delay),
+                    **task_callbacks
+                )
         
         elif task_config.operator_type == OperatorType.QUALITY_CHECK:
             if not task_config.quality_rules:
@@ -394,6 +528,68 @@ class IntegratedDAGFactory:
         )
         
         return dag
+    
+    def _log_comprehensive_dag_metrics(self, pipeline_config, task_count: int):
+        """Log ALL available metrics for comprehensive monitoring"""
+        dag_id = pipeline_config.dag_id
+        
+        try:
+            # 1. DAG-level initialization metrics
+            DAG_RUNS_TOTAL.labels(dag_id=dag_id, status='created').inc()
+            DAG_SUCCESS_RATE.labels(dag_id=dag_id).set(100.0)  # Start optimistic
+            DAG_CONSECUTIVE_FAILURES.labels(dag_id=dag_id).set(0)
+            
+            # 2. Initialize task metrics for all tasks
+            for task_config in pipeline_config.tasks:
+                task_id = task_config.task_id
+                
+                # Task initialization
+                TASK_RUNS_TOTAL.labels(dag_id=dag_id, task_id=task_id, status='initialized').inc()
+                TASK_SUCCESS_RATE.labels(dag_id=dag_id, task_id=task_id).set(100.0)
+                
+                # Set up data processing metrics based on task type
+                if hasattr(task_config, 'source') and task_config.source:
+                    source_type = task_config.source.type.value if hasattr(task_config.source.type, 'value') else str(task_config.source.type)
+                    RECORDS_PROCESSED.labels(dag_id=dag_id, task_id=task_id, source_type=source_type).inc(0)
+                
+                # Initialize data quality scores
+                if hasattr(task_config, 'quality_rules') and task_config.quality_rules:
+                    for rule in task_config.quality_rules:
+                        DATA_QUALITY_SCORE.labels(dag_id=dag_id, task_id=task_id, rule_name=rule.name).set(1.0)
+            
+            # 3. Framework health indicators
+            FRAMEWORK_HEALTH.labels(component='dag_creation').set(1)
+            FRAMEWORK_HEALTH.labels(component=f'dag_{dag_id}').set(1)
+            
+            # 4. Queue and throughput initialization
+            QUEUE_SIZE.labels(dag_id=dag_id).set(0)
+            PIPELINE_THROUGHPUT.labels(dag_id=dag_id).set(0)
+            
+            # 5. Active tasks gauge
+            ACTIVE_TASKS.labels(dag_id=dag_id, status='pending').set(task_count)
+            ACTIVE_TASKS.labels(dag_id=dag_id, status='running').set(0)
+            ACTIVE_TASKS.labels(dag_id=dag_id, status='success').set(0)
+            ACTIVE_TASKS.labels(dag_id=dag_id, status='failed').set(0)
+            
+            # 6. Set initial timestamps
+            current_timestamp = datetime.now().timestamp()
+            DAG_LAST_SUCCESS.labels(dag_id=dag_id).set(0)  # Will be updated on first success
+            DAG_LAST_FAILURE.labels(dag_id=dag_id).set(0)   # Will be updated on first failure
+            
+            logger.info(f"🎯 Comprehensive metrics logged for DAG: {dag_id}")
+            logger.info(f"   📊 Initialized {task_count} task metrics")
+            logger.info(f"   🏥 Framework health: ✅")
+            logger.info(f"   📈 Success rates: 100% (initial)")
+            logger.info(f"   🔄 Active tasks: {task_count} pending")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to log comprehensive metrics for {dag_id}: {e}")
+            # Set framework health to unhealthy if metrics fail
+            try:
+                FRAMEWORK_HEALTH.labels(component='dag_creation').set(0)
+                ERROR_COUNT.labels(dag_id=dag_id, task_id='dag_factory', error_type='metrics_error').inc()
+            except:
+                pass  # Avoid cascading errors
 
 # Create the integrated factory instance that uses your real operators
 DAGFactory = IntegratedDAGFactory
